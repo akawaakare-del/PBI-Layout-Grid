@@ -1,6 +1,6 @@
 # Sprint 1 开发 Prompt（交给 AI 编码用）
 
-> 使用方法：把本文整段发给 AI，并附上 `docs/01-plan/PRD.md`、`docs/01-plan/user-stories/stories.md`、`docs/01-plan/io-samples/` 下的样例 CSV。产物放 `src/main/index.html`。
+> 使用方法：把下方代码块整段发给 AI，只需再附上 `docs/01-plan/io-samples/` 下的样例 CSV。**不需要**附 PRD / 用户故事：prompt 已自包含 Sprint 1 的全部需求与验收，且 PRD 含 Sprint 2 的内容，附上容易让 AI 越界。产物放 `src/main/index.html`。
 
 ---
 
