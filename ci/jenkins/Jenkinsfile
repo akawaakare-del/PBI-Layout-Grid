@@ -1,0 +1,1 @@
+// CI 流水线：构建 → JUnit 单测 → JaCoCo 覆盖率 → Sonar 扫描 → 归档制品 → 部署
