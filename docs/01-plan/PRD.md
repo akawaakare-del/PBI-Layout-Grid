@@ -30,7 +30,7 @@
 - 网页只允许修改 `X/Y/Width/Height`，其余列原样透传（含 `Page` 前后空格，不 trim）；行顺序不变。
 - 提取阶段报表**不使用群组**，不处理群组偏移；隐藏视觉不导出。
 - 回写时只用 `Id` 在 `.Report/definition/pages/*/visuals/*/visual.json` 中定位（`name` 字段），只改 `position.x/y/width/height`。
-- 样例：`docs/01-plan/io-samples/`。提取与回写脚本由其他 AI 按 `docs/01-plan/io-prompts.md` 编写。
+- 样例：`docs/01-plan/io-samples/`。提取脚本已完成（`scripts/`），回写脚本由其他 AI 按 `docs/01-plan/io-prompts.md` 编写。
 
 ## 7. 版面与交互设计原则
 **版面：** 左右两栏。

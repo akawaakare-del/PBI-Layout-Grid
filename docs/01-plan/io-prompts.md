@@ -1,18 +1,8 @@
-# 给其他 AI 的 Prompt（提取脚本 / 回写脚本）
+# 给其他 AI 的 Prompt（回写脚本）
 
-共同约定见 `PRD.md` §6。样例：`docs/01-plan/io-samples/`；现有提取脚本：`scripts/Get-VisualLayout.ps1`。
+共同约定见 `PRD.md` §6。样例：`docs/01-plan/io-samples/`；提取脚本已完成：`scripts/Get-VisualLayout.ps1`。
 
-## Prompt A：小改提取脚本（坐标取整）
-
-```
-请修改附上的 PowerShell 脚本 Get-VisualLayout.ps1，其余逻辑和输出格式（CSV、UTF-8 带 BOM、列 Page,Id,Type,X,Y,Width,Height、排序、交互、.bat 启动器）全部不变，只改一处：
-
-X、Y、Width、Height 四列输出为整数（四舍五入，[math]::Round(值, 0, 'AwayFromZero')），CSV 里不再出现小数点。
-
-验收：对样例报表运行，行数与 io-samples 中的 csv 一致（68 行），四列均无小数。
-```
-
-## Prompt B：回写脚本
+## 回写脚本
 
 ```
 请写一个 PowerShell 脚本 Set-VisualLayout.ps1，把修改后的 CSV 布局写回 Power BI PBIP 报表。
