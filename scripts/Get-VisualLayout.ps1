@@ -63,10 +63,11 @@ $rows = foreach ($pageDir in Get-ChildItem $pagesDir -Directory) {
             Page   = $pageName
             Id     = $v.name                     # 視覺的唯一 ID，要改檔案時靠它定位
             Type   = $v.visual.visualType
-            X      = [math]::Round($absX, 1)
-            Y      = [math]::Round($absY, 1)
-            Width  = [math]::Round($v.position.width, 1)
-            Height = [math]::Round($v.position.height, 1)
+            # 一律無條件進位成整數，省得看一堆小數
+            X      = [math]::Ceiling($absX)
+            Y      = [math]::Ceiling($absY)
+            Width  = [math]::Ceiling($v.position.width)
+            Height = [math]::Ceiling($v.position.height)
         }
     }
 }
