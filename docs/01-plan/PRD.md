@@ -23,12 +23,11 @@
 | 把新列表写回 visual.json | **不在本工具内**（由 AI 完成） |
 
 ## 6. 输入 / 输出格式
-**格式：Excel（.xlsx），一个页面一个 sheet；输入与输出结构完全一致。**
+**格式：CSV（UTF-8 带 BOM），只接受 CSV；输入与输出结构完全一致。** 多页报表放在同一个 CSV 里，用 `Page` 列区分，网页按页切换显示。
 
-- sheet 名 = 报表页名（Excel 限制：≤31 字符、不含 `\ / ? * [ ] :`，脚本需处理）。
-- 每个 sheet 的列固定为：`Id, Type, X, Y, Width, Height`，一行一个视觉。
+- 列固定为：`Page, Id, Type, X, Y, Width, Height`，一行一个视觉（即现有脚本的输出，仅坐标改为整数）。
 - `X/Y/Width/Height` 一律**整数**（脚本导出时四舍五入）；原点左上角，画布 1280×720。
-- 网页只允许修改 `X/Y/Width/Height`，其余列原样透传；页面/行顺序不变。
+- 网页只允许修改 `X/Y/Width/Height`，其余列原样透传（含 `Page` 前后空格，不 trim）；行顺序不变。
 - 提取阶段报表**不使用群组**，不处理群组偏移；隐藏视觉不导出。
 - 回写时只用 `Id` 在 `.Report/definition/pages/*/visuals/*/visual.json` 中定位（`name` 字段），只改 `position.x/y/width/height`。
 - 样例：`docs/01-plan/io-samples/`。提取与回写脚本由其他 AI 按 `docs/01-plan/io-prompts.md` 编写。
