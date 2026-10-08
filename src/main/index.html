@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PBI Layout Grid — 布局调整工具（Sprint 1）</title>
+<style>
+  /* ============ 基础与布局 ============ */
+  :root {
+    --bg: #1e1f24;
+    --panel: #26272e;
+    --panel-2: #2d2f37;
+    --border: #3a3c46;
+    --text: #d8dade;
+    --text-dim: #8b8e99;
+    --accent: #4f8cff;
+    --accent-dim: #2c4a80;
+    --modified: #e8862e;
+    --danger: #e05b5b;
+    --ok: #4caf7d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ============ 工具栏 ============ */
+  #toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  #toolbar .sep { width: 1px; height: 20px; background: var(--border); }
+  button, select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.on { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tag-s2 {
+    font-size: 10px; color: var(--text-dim); margin-left: 3px;
+    border: 1px solid var(--border); border-radius: 3px; padding: 0 3px;
+  }
+  #zoomLabel { color: var(--text-dim); min-width: 44px; text-align: right; }
+  #changeLabel { color: var(--modified); }
+  #fileLabel { color: var(--text-dim); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ============ 主体：左工作台 / 右工作区 ============ */
+  #main { flex: 1; display: flex; min-height: 0; }
+
+  #sidebar {
+    width: 250px; min-width: 250px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .side-section-title {
+    padding: 6px 10px; font-size: 12px; color: var(--text-dim);
+    background: var(--panel-2); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #compListWrap { flex: 1; overflow-y: auto; min-height: 0; }
+  #compList .row {
+    padding: 5px 10px; cursor: pointer;
+    border-bottom: 1px solid #30323a;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; overflow: hidden;
+  }
+  #compList .row:hover { background: var(--panel-2); }
+  #compList .row.selected { background: var(--accent-dim); color: #fff; }
+  #compList .row .type { font-weight: 600; }
+  #compList .row .id { color: var(--text-dim); font-size: 11px; }
+  #compList .row.selected .id { color: #c5d5f5; }
+  #compList .row .mod-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--modified); flex: none; visibility: hidden;
+  }
+  #compList .row.modified .mod-dot { visibility: visible; }
+  #pointsWrap { height: 160px; border-top: 1px solid var(--border); overflow-y: auto; }
+  #pointsWrap .placeholder { padding: 16px 10px; color: var(--text-dim); font-size: 12px; line-height: 1.7; }
+
+  /* ============ 工作区 / 画布 ============ */
+  #workspace {
+    flex: 1; position: relative; overflow: hidden;
+    background: #16171b;
+  }
+  #workspace.panning { cursor: grabbing; }
+  #workspace.space-held { cursor: grab; }
+  svg#viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* HUD：不随画布缩放，保证读数清晰 */
+  .hud {
+    position: absolute; pointer-events: none;
+    background: rgba(20,21,26,.85); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font-size: 12px;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.6; white-space: nowrap; z-index: 5;
+  }
+  #hudSelection { top: 10px; left: 10px; display: none; }
+  #hudMouse { bottom: 10px; left: 10px; display: none; }
+  #hudDrag { top: 10px; left: 200px; display: none; color: #ffe2b8; }
+  #hudZoom { bottom: 10px; right: 10px; color: var(--text-dim); }
+
+  /* SVG 内部元素 */
+  .item .body { stroke-width: 1.5; }
+  .item.selected .body { stroke: var(--accent) !important; stroke-width: 2; }
+  .item .hit { fill: transparent; pointer-events: all; }
+  .item .label { font-size: 10px; fill: #333; pointer-events: none; font-family: inherit; }
+  .item .label-id { fill: #667; }
+  .item .handle { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; } /* S2 才可拖 */
+  .item .mod-badge { display: none; }
+  .item.modified .mod-badge { display: block; }
+
+  /* ============ 消息面板 ============ */
+  #messages {
+    position: absolute; top: 10px; right: 10px; z-index: 20;
+    max-width: 420px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .msg {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  }
+  .msg.error { border-left-color: var(--danger); }
+  .msg.warn { border-left-color: var(--modified); }
+  .msg .close { float: right; cursor: pointer; color: var(--text-dim); margin-left: 8px; pointer-events: all; }
+  .msg ul { margin: 4px 0 0 16px; max-height: 160px; overflow-y: auto; }
+
+  /* ============ 拖放遮罩 ============ */
+  #dropOverlay {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    background: rgba(20,30,50,.7); border: 3px dashed var(--accent);
+    align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; pointer-events: none;
+  }
+  body.dragging-file #dropOverlay { display: flex; }
+
+  #statusbar {
+    padding: 4px 10px; background: var(--panel);
+    border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: 12px;
+    display: flex; gap: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header id="toolbar">
+  <button id="btnImport" class="primary" title="选择 CSV 文件（也可直接拖文件到页面）">导入 CSV</button>
+  <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+  <span id="fileLabel"></span>
+  <span class="sep"></span>
+  <label style="color:var(--text-dim)">页面</label>
+  <select id="pageSelect" disabled></select>
+  <span class="sep"></span>
+  <button id="btnSnapGrid" class="on" disabled title="拖动时吸附到 10px 网格">网格吸附</button>
+  <button id="btnSnapComp" disabled title="吸附到其他组件（Sprint 2 实现）">组件吸附<span class="tag-s2">S2</span></button>
+  <span class="sep"></span>
+  <button id="btnUndo" disabled title="Ctrl+Z">撤销</button>
+  <button id="btnRedo" disabled title="Ctrl+Y / Ctrl+Shift+Z">重做</button>
+  <button id="btnReset" disabled title="恢复到导入时的状态（可撤销）">重置</button>
+  <span class="sep"></span>
+  <button id="btnExport" class="primary" disabled title="导出全部页面（含未修改页）">导出 CSV</button>
+  <span id="changeLabel"></span>
+  <span style="flex:1"></span>
+  <button id="btnFit" disabled>适应窗口</button>
+  <span id="zoomLabel">100%</span>
+</header>
+
+<div id="main">
+  <aside id="sidebar">
+    <div class="side-section-title"><span>组件列表</span><span id="listCount"></span></div>
+    <div id="compListWrap"><div id="compList"></div></div>
+    <div class="side-section-title"><span>已保存坐标点</span><span class="tag-s2">S2</span></div>
+    <div id="pointsWrap">
+      <div class="placeholder">右键保存坐标点将在 Sprint 2 提供。<br>当前迭代此区域仅占位。</div>
+    </div>
+  </aside>
+
+  <section id="workspace">
+    <svg id="viewport" xmlns="http://www.w3.org/2000/svg">
+      <g id="world"></g>
+    </svg>
+    <div class="hud" id="hudSelection"></div>
+    <div class="hud" id="hudDrag"></div>
+    <div class="hud" id="hudMouse"></div>
+    <div class="hud" id="hudZoom">100%</div>
+    <div id="messages"></div>
+  </section>
+</div>
+
+<footer id="statusbar">
+  <span id="statusFile">未导入文件</span>
+  <span id="statusPage">—</span>
+  <span id="statusSel">未选中组件</span>
+</footer>
+
+<div id="dropOverlay">松开以导入 CSV 文件</div>
+
+<script id="pbi-logic">
+// ============================================================================
+// PBILOGIC-BEGIN
+// 纯逻辑块：CSV 解析/序列化 + 命令栈。与 DOM 无关，可在浏览器与 Node 中复用。
+// 浏览器：挂载 globalThis.PbiLogic；Node：module.exports（测试脚本直接复用本块）。
+// 关键约定：
+//  - 画布逻辑尺寸固定 1280×720，原点左上角，坐标一律整数。
+//  - Page 值原样保留（不 trim，含前导空格）；同名 Page 视为同一页。
+//  - 换行风格：导出沿用导入时检测到的 EOL（含 CRLF 则 CRLF，否则 LF），
+//    使得"未修改坐标"时导出与输入逐字节等价。
+// ============================================================================
+(function (global) {
+  'use strict';
+
+  var CANVAS_W = 1280;
+  var CANVAS_H = 720;
+  var HEADER = ['Page', 'Id', 'Type', 'X', 'Y', 'Width', 'Height'];
+  var NUM_FIELDS = { X: 'x', Y: 'y', Width: 'w', Height: 'h' };
+
+  /** 解析一行 CSV（支持引号字段、字段内引号转义 ""、字段内逗号）。 */
+  function parseCsvLine(line) {
+    var fields = [], cur = '', inQ = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (inQ) {
+        if (c === '"') {
+          if (line[i + 1] === '"') { cur += '"'; i++; }
+          else { inQ = false; }
+        } else { cur += c; }
+      } else if (c === '"') { inQ = true; }
+      else if (c === ',') { fields.push(cur); cur = ''; }
+      else { cur += c; }
+    }
+    fields.push(cur);
+    return fields;
+  }
+
+  function isIntLike(n) { return Math.abs(n - Math.round(n)) < 1e-9; }
+
+  /**
+   * 解析 CSV 文本为数据模型。
+   * 返回 { eol, header, pages:[{name, items:[]}], items:[...], errors:[...], roundNotes:[...] }
+   * 错误行不导入但不阻断其他行；错误信息含"第几行 / 哪个 Id / 哪个字段"。
+   */
+  function parseCSV(text) {
+    var eol = text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+    var src = text;
+    if (src.charCodeAt(0) === 0xFEFF) src = src.slice(1); // 去 BOM
+    src = src.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    var rawLines = src.split('\n');
+    // 末尾换行产生的空段丢弃；中间空行跳过（健壮性，不报错）
+    if (rawLines.length && rawLines[rawLines.length - 1] === '') rawLines.pop();
+
+    var errors = [], roundNotes = [];
+    var pages = [], pageMap = Object.create(null), items = [];
+
+    var firstIdx = -1;
+    for (var li = 0; li < rawLines.length; li++) {
+      if (rawLines[li].trim() !== '') { firstIdx = li; break; }
+    }
+    if (firstIdx < 0) {
+      return { eol: eol, header: HEADER.slice(), pages: [], items: [], errors: [{ line: 0, id: '-', field: '-', msg: '文件为空' }], roundNotes: [] };
+    }
+
+    // 表头校验（表头单元格允许首尾空白）
+    var headerFields = parseCsvLine(rawLines[firstIdx]).map(function (s) { return s.trim(); });
+    if (headerFields.join(',') !== HEADER.join(',')) {
+      errors.push({ line: firstIdx + 1, id: '-', field: '-', msg: '表头应为 Page,Id,Type,X,Y,Width,Height，实际为：' + headerFields.join(',') });
+      return { eol: eol, header: HEADER.slice(), pages: [], items: [], errors: errors, roundNotes: roundNotes };
+    }
+
+    for (var i = firstIdx + 1; i < rawLines.length; i++) {
+      var lineNo = i + 1; // 1 起始，含表头
+      var line = rawLines[i];
+      if (line.trim() === '') continue; // 空行跳过
+      var f = parseCsvLine(line);
+      if (f.length !== 7) {
+        errors.push({ line: lineNo, id: f[1] || '-', field: '-', msg: '字段数为 ' + f.length + '，应为 7' });
+        continue;
+      }
+      // Page/Id/Type 原样保留，不 trim
+      var page = f[0], id = f[1], type = f[2];
+      var nums = {}, bad = null, fracFields = [];
+      for (var k = 3; k < 7; k++) {
+        var name = HEADER[k];
+        var t = f[k].trim();
+        var n = Number(t);
+        if (t === '' || !Number.isFinite(n)) { bad = { field: name, msg: '不是数字 "' + f[k] + '"' }; break; }
+        if (n < 0) { bad = { field: name, msg: '负数 ' + n }; break; }
+        if (!isIntLike(n)) fracFields.push(name);
+        nums[NUM_FIELDS[name]] = n;
+      }
+      if (!bad && (nums.w <= 0 || nums.h <= 0)) bad = { field: nums.w <= 0 ? 'Width' : 'Height', msg: '必须大于 0' };
+      if (!bad && (nums.x + nums.w > CANVAS_W || nums.y + nums.h > CANVAS_H)) {
+        bad = { field: nums.x + nums.w > CANVAS_W ? 'X/Width' : 'Y/Height', msg: '超出 1280×720 画布（x+w=' + (nums.x + nums.w) + ', y+h=' + (nums.y + nums.h) + '）' };
+      }
+      if (bad) {
+        errors.push({ line: lineNo, id: id || '-', field: bad.field, msg: bad.msg });
+        continue;
+      }
+      var item = {
+        page: page, id: id, type: type,
+        x: Math.round(nums.x), y: Math.round(nums.y),
+        w: Math.round(nums.w), h: Math.round(nums.h),
+        orig: null // 导入后由应用层设置（重置基准）
+      };
+      if (fracFields.length) {
+        roundNotes.push({ line: lineNo, id: id, fields: fracFields });
+      }
+      if (!pageMap[page]) {
+        var pg = { name: page, items: [] };
+        pageMap[page] = pg;
+        pages.push(pg);
+      }
+      pageMap[page].items.push(item);
+      items.push(item);
+    }
+    return { eol: eol, header: HEADER.slice(), pages: pages, items: items, errors: errors, roundNotes: roundNotes };
+  }
+
+  /**
+   * 序列化为 CSV（不含 BOM，由调用方决定加不加）。
+   * 列、列顺序、行顺序、Page 原文均与输入一致，仅 X/Y/Width/Height 取值可能不同。
+   * 所有字段一律加引号（与样例文件风格一致），字段内引号转义为 ""。
+   */
+  function serializeCSV(model) {
+    var esc = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+    var lines = [model.header.map(esc).join(',')];
+    for (var i = 0; i < model.items.length; i++) {
+      var it = model.items[i];
+      lines.push([it.page, it.id, it.type, it.x, it.y, it.w, it.h].map(esc).join(','));
+    }
+    return lines.join(model.eol) + model.eol;
+  }
+
+  /**
+   * 命令栈（撤销/重做）。历史策略：全局一条栈，跨页面共享
+   * （同一文件内的所有编辑按时间顺序撤销，简单且可预期）。
+   * 命令对象约定：{ label, do(), undo() }。push 后截断重做分支。
+   */
+  function createCommandStack(limit) {
+    limit = limit || 500;
+    var stack = [], idx = 0; // idx 指向下一条可撤销命令的下一位置
+    return {
+      push: function (cmd) {
+        stack.length = idx;
+        stack.push(cmd);
+        if (stack.length > limit) stack.shift();
+        idx = stack.length;
+        cmd.do();
+      },
+      undo: function () {
+        if (idx === 0) return null;
+        var cmd = stack[--idx];
+        cmd.undo();
+        return cmd;
+      },
+      redo: function () {
+        if (idx >= stack.length) return null;
+        var cmd = stack[idx++];
+        cmd.do();
+        return cmd;
+      },
+      canUndo: function () { return idx > 0; },
+      canRedo: function () { return idx < stack.length; },
+      clear: function () { stack = []; idx = 0; },
+      get length() { return idx; }
+    };
+  }
+
+  var PbiLogic = {
+    CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, HEADER: HEADER, GRID: 10,
+    parseCSV: parseCSV, serializeCSV: serializeCSV, createCommandStack: createCommandStack
+  };
+  global.PbiLogic = PbiLogic;
+  if (typeof module !== 'undefined' && module.exports) module.exports = PbiLogic;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+// PBILOGIC-END
+</script>
+
+<script>
+// ============================================================================
+// 应用层：状态 / 命令 / 渲染 / 交互 分层。
+// Sprint 2 扩展点已用 [S2] 标注：组件吸附+引导线、拖边改宽高（8 手柄已渲染但
+// pointer-events:none）、坐标输入框、方向键微调、Shift 直线移动、右键保存坐标点。
+// ============================================================================
+(function () {
+  'use strict';
+  var L = globalThis.PbiLogic;
+  var GRID = L.GRID, CW = L.CANVAS_W, CH = L.CANVAS_H;
+  var MIN_ZOOM = 0.25, MAX_ZOOM = 4;
+  var HIT_MIN = 10;          // 极小组件的最小可点区域（画布像素）
+  var DRAG_THRESHOLD = 3;    // 屏幕像素，超过才算拖拽（否则视为点击）
+
+  // ---------- 状态（数据模型层） ----------
+  var state = {
+    model: null,        // 解析后的模型（pages/items/eol/errors/roundNotes）
+    fileName: '',       // 原文件名（导出名 = 去扩展名 + '-modified.csv'）
+    pageIndex: 0,
+    selectedId: null,
+    snapGrid: true,
+    snapComp: false,    // [S2] 本迭代仅可切换状态，无实际吸附逻辑
+    zoom: 1,
+    pan: { x: 0, y: 0 },
+    spaceHeld: false
+  };
+  var itemEls = Object.create(null); // id -> svg g 元素（当前页）
+
+  // 历史：全局一条命令栈，跨页面共享（见 PbiLogic.createCommandStack 注释）
+  var history = L.createCommandStack(500);
+
+  // ---------- 类型配色（淡色填充 + 深描边，保证区分度） ----------
+  var TYPE_COLORS = {
+    shape:                 ['#e3e8f4', '#5b6b99'],
+    textbox:               ['#fdeacc', '#b98a2e'],
+    image:                 ['#e2d7f0', '#7a5ba8'],
+    cardVisual:            ['#d5ecd8', '#3f8a4e'],
+    actionButton:          ['#f6d9d9', '#b05252'],
+    slicer:                ['#d2e6f2', '#3d7ba6'],
+    listSlicer:            ['#cfeef0', '#37919a'],
+    advancedSlicerVisual:  ['#cfeef0', '#37919a'],
+    tableEx:               ['#f2e3c8', '#a8803a'],
+    pivotTable:            ['#f2e3c8', '#a8803a'],
+    hundredPercentStackedBarChart: ['#dcebd2', '#5c8a3e'],
+    pageNavigator:         ['#e6d2dc', '#9a5578']
+  };
+  function colorFor(type) {
+    if (TYPE_COLORS[type]) return TYPE_COLORS[type];
+    // 未知类型：按字符串哈希生成稳定淡色
+    var h = 0;
+    for (var i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) >>> 0;
+    var hue = h % 360;
+    return ['hsl(' + hue + ',45%,88%)', 'hsl(' + hue + ',40%,45%)'];
+  }
+
+  // ---------- DOM 引用 ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var workspace = $('workspace'), svg = $('viewport'), world = $('world');
+
+  // ==========================================================================
+  // 命令层：每条命令 = 一次完成的编辑。撤销/重做只经过这里改数据。
+  // ==========================================================================
+  function isModified(it) { return it.x !== it.orig.x || it.y !== it.orig.y; }
+  function modifiedCount() {
+    if (!state.model) return 0;
+    var n = 0;
+    for (var i = 0; i < state.model.items.length; i++) if (isModified(state.model.items[i])) n++;
+    return n;
+  }
+
+  function clampToCanvas(it, x, y) {
+    x = Math.min(Math.max(0, x), CW - it.w);
+    y = Math.min(Math.max(0, y), CH - it.h);
+    return { x: x, y: y };
+  }
+  function applySnap(x, y) {
+    if (state.snapGrid) {
+      x = Math.round(x / GRID) * GRID;
+      y = Math.round(y / GRID) * GRID;
+    } else {
+      x = Math.round(x); // 1px 精度
+      y = Math.round(y);
+    }
+    // [S2] 组件吸附（snapComp）在这里接入：优先于网格或在其后细化。
+    return { x: x, y: y };
+  }
+
+  /** 移动命令（一次拖拽结束 = 一条命令） */
+  function makeMoveCommand(item, from, to) {
+    return {
+      label: '移动 ' + item.id,
+      do: function () { item.x = to.x; item.y = to.y; },
+      undo: function () { item.x = from.x; item.y = from.y; }
+    };
+  }
+
+  /** 重置命令：恢复全部改动项到导入基准，undo 恢复改动后状态 */
+  function makeResetCommand(changes) {
+    return {
+      label: '重置',
+      do: function () { for (var i = 0; i < changes.length; i++) { changes[i].item.x = changes[i].from.x; changes[i].item.y = changes[i].from.y; } },
+      undo: function () { for (var i = 0; i < changes.length; i++) { changes[i].item.x = changes[i].to.x; changes[i].item.y = changes[i].to.y; } }
+    };
+  }
+
+  /** 统一入口：执行命令 + 刷新 UI */
+  function execute(cmd) {
+    history.push(cmd);
+    syncAfterDataChange();
+  }
+
+  // ==========================================================================
+  // 渲染层
+  // ==========================================================================
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  /** 构建当前页的 world 内容（背景 + 网格 + 组件）。缩放/平移只改 world 的 transform。 */
+  function renderPage() {
+    world.textContent = '';
+    itemEls = Object.create(null);
+    if (!state.model) { applyTransform(); return; }
+
+    var bg = el('rect', { x: 0, y: 0, width: CW, height: CH, fill: '#ffffff' }, world);
+    bg.addEventListener('pointerdown', onBlankPointerDown);
+
+    // 10px 网格；50px 较深、100px 最深（一个 100×100 pattern 内完成，绘制成本低）
+    var defs = el('defs', {}, world);
+    var pattern = el('pattern', { id: 'grid10', width: 100, height: 100, patternUnits: 'userSpaceOnUse' }, defs);
+    el('rect', { width: 100, height: 100, fill: '#ffffff' }, pattern);
+    for (var g = 10; g < 100; g += 10) {
+      var major = (g % 50 === 0);
+      el('line', { x1: g, y1: 0, x2: g, y2: 100, stroke: major ? '#d3d8e0' : '#eceff3', 'stroke-width': 1 }, pattern);
+      el('line', { x1: 0, y1: g, x2: 100, y2: g, stroke: major ? '#d3d8e0' : '#eceff3', 'stroke-width': 1 }, pattern);
+    }
+    el('line', { x1: 0.5, y1: 0, x2: 0.5, y2: 100, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
+    el('line', { x1: 0, y1: 0.5, x2: 100, y2: 0.5, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
+    el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'url(#grid10)' }, world);
+    // 画布边界
+    el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'none', stroke: '#8a93a3', 'stroke-width': 2 }, world);
+
+    // 拖拽时"原位置虚线轮廓"：一个共享元素，直接位于世界坐标
+    el('rect', { id: 'dragGhost', x: 0, y: 0, width: 0, height: 0, fill: 'none', stroke: '#e8862e', 'stroke-width': 1.5, 'stroke-dasharray': '6 4', style: 'display:none;pointer-events:none' }, world);
+
+    var page = state.model.pages[state.pageIndex];
+    for (var i = 0; i < page.items.length; i++) buildItem(page.items[i]);
+    applyTransform();
+    updateSelectionUI();
+    $('listCount').textContent = page.items.length + ' 个';
+    $('statusPage').textContent = '当前页：' + JSON.stringify(page.name) + '（' + (state.pageIndex + 1) + '/' + state.model.pages.length + '）';
+  }
+
+  function buildItem(item) {
+    var colors = colorFor(item.type);
+    var g = el('g', { 'class': 'item', 'data-id': item.id }, world);
+    // 最小可点区域保护：透明 hit 矩形，极小组件也能点中
+    var hw = Math.max(item.w, HIT_MIN), hh = Math.max(item.h, HIT_MIN);
+    el('rect', { 'class': 'hit', x: (item.w - hw) / 2, y: (item.h - hh) / 2, width: hw, height: hh }, g);
+    el('rect', { 'class': 'body', x: 0, y: 0, width: item.w, height: item.h, rx: 1, fill: colors[0], stroke: colors[1] }, g);
+    // 标签裁剪：太小则裁剪/仅显示 Type，不溢出
+    var clipId = 'cp-' + item.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    var defs = el('defs', {}, g);
+    var clipRect = el('rect', { x: 0, y: 0, width: item.w, height: item.h });
+    el('clipPath', { id: clipId }, defs).appendChild(clipRect);
+    var labelG = el('g', { 'clip-path': 'url(#' + clipId + ')' }, g);
+    el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = item.type;
+    if (item.w >= 74 && item.h >= 26) {
+      el('text', { 'class': 'label label-id', x: 3, y: 24 }, labelG).textContent = '#' + item.id.slice(0, 6);
+    }
+    // 8 个手柄：本迭代仅展示（CSS pointer-events:none），[S2] 才可拖
+    var HANDLE = 7;
+    [[0, 0], [0.5, 0], [1, 0], [0, 0.5], [1, 0.5], [0, 1], [0.5, 1], [1, 1]].forEach(function (p) {
+      el('rect', {
+        'class': 'handle', width: HANDLE, height: HANDLE,
+        x: p[0] * item.w - HANDLE / 2, y: p[1] * item.h - HANDLE / 2,
+        style: 'display:none'
+      }, g);
+    });
+    // "已修改"角标
+    el('rect', { 'class': 'mod-badge', x: item.w - 16, y: 0, width: 16, height: 14, fill: '#e8862e' }, g);
+    var badgeText = el('text', { x: item.w - 11.5, y: 11, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', style: 'pointer-events:none' }, g);
+    badgeText.textContent = '改';
+    badgeText.setAttribute('class', 'mod-badge');
+
+    g.addEventListener('pointerdown', function (e) { onItemPointerDown(e, item); });
+    positionItem(g, item);
+    if (isModified(item)) g.classList.add('modified');
+    itemEls[item.id] = g;
+  }
+
+  function positionItem(g, item) {
+    g.setAttribute('transform', 'translate(' + item.x + ',' + item.y + ')');
+  }
+
+  function applyTransform() {
+    world.setAttribute('transform', 'translate(' + state.pan.x + ',' + state.pan.y + ') scale(' + state.zoom + ')');
+    var pct = Math.round(state.zoom * 100) + '%';
+    $('zoomLabel').textContent = pct;
+    $('hudZoom').textContent = pct;
+  }
+
+  /** 屏幕坐标 -> 画布逻辑坐标（整数） */
+  function screenToCanvas(sx, sy) {
+    var r = svg.getBoundingClientRect();
+    return {
+      x: (sx - r.left - state.pan.x) / state.zoom,
+      y: (sy - r.top - state.pan.y) / state.zoom
+    };
+  }
+
+  /** 适应窗口 */
+  function fitToWindow() {
+    var r = workspace.getBoundingClientRect();
+    var z = Math.min((r.width - 60) / CW, (r.height - 60) / CH);
+    z = Math.min(Math.max(z, MIN_ZOOM), MAX_ZOOM);
+    state.zoom = z;
+    state.pan.x = (r.width - CW * z) / 2;
+    state.pan.y = (r.height - CH * z) / 2;
+    applyTransform();
+  }
+
+  // ==========================================================================
+  // 组件列表（与画布选中联动）
+  // ==========================================================================
+  function renderList() {
+    var list = $('compList');
+    list.textContent = '';
+    if (!state.model) { $('listCount').textContent = ''; return; }
+    var page = state.model.pages[state.pageIndex];
+    for (var i = 0; i < page.items.length; i++) {
+      (function (item) {
+        var row = document.createElement('div');
+        row.className = 'row' + (isModified(item) ? ' modified' : '') + (item.id === state.selectedId ? ' selected' : '');
+        var dot = document.createElement('span'); dot.className = 'mod-dot';
+        var type = document.createElement('span'); type.className = 'type'; type.textContent = item.type;
+        var id = document.createElement('span'); id.className = 'id'; id.textContent = '#' + item.id.slice(0, 6);
+        row.appendChild(dot); row.appendChild(type); row.appendChild(id);
+        row.title = item.id;
+        row.addEventListener('click', function () { selectItem(item.id); });
+        list.appendChild(row);
+      })(page.items[i]);
+    }
+  }
+
+  function findItem(id) {
+    if (!state.model) return null;
+    for (var i = 0; i < state.model.items.length; i++) if (state.model.items[i].id === id) return state.model.items[i];
+    return null;
+  }
+
+  function selectItem(id) {
+    state.selectedId = id;
+    updateSelectionUI();
+    // 列表滚动到选中项
+    var list = $('compList');
+    var selRow = list.querySelector('.row.selected');
+    if (selRow) selRow.scrollIntoView({ block: 'nearest' });
+  }
+
+  function updateSelectionUI() {
+    var page = state.model ? state.model.pages[state.pageIndex] : null;
+    if (page) {
+      for (var i = 0; i < page.items.length; i++) {
+        var g = itemEls[page.items[i].id];
+        if (!g) continue;
+        var sel = page.items[i].id === state.selectedId;
+        g.classList.toggle('selected', sel);
+        var handles = g.querySelectorAll('.handle');
+        for (var h = 0; h < handles.length; h++) handles[h].style.display = sel ? '' : 'none';
+      }
+    }
+    var item = state.selectedId ? findItem(state.selectedId) : null;
+    var hud = $('hudSelection');
+    if (item) {
+      hud.style.display = '';
+      hud.textContent = '选中  X:' + item.x + '  Y:' + item.y + '  W:' + item.w + '  H:' + item.h + '（只读，输入框为 S2）';
+      $('statusSel').textContent = '选中：' + item.type + ' #' + item.id.slice(0, 6);
+    } else {
+      hud.style.display = 'none';
+      $('statusSel').textContent = '未选中组件';
+    }
+    // 列表选中态
+    var rows = $('compList').children;
+    for (var r = 0; r < rows.length; r++) {
+      rows[r].classList.toggle('selected', rows[r].title === state.selectedId);
+    }
+  }
+
+  /** 数据变化后的统一刷新（命令执行/撤销/重做/重置后调用） */
+  function syncAfterDataChange() {
+    var page = state.model.pages[state.pageIndex];
+    for (var i = 0; i < page.items.length; i++) {
+      var it = page.items[i], g = itemEls[it.id];
+      if (!g) continue;
+      positionItem(g, it);
+      g.classList.toggle('modified', isModified(it));
+    }
+    renderList();
+    updateSelectionUI();
+    updateToolbar();
+  }
+
+  function updateToolbar() {
+    $('btnUndo').disabled = !history.canUndo();
+    $('btnRedo').disabled = !history.canRedo();
+    var n = modifiedCount();
+    $('changeLabel').textContent = state.model ? (n > 0 ? '已修改 ' + n + ' 个组件' : '') : '';
+  }
+
+  // ==========================================================================
+  // 消息提示
+  // ==========================================================================
+  function showMsg(kind, title, lines) {
+    var box = $('messages');
+    var div = document.createElement('div');
+    div.className = 'msg ' + kind;
+    var close = document.createElement('span');
+    close.className = 'close'; close.textContent = '✕';
+    close.addEventListener('click', function () { div.remove(); });
+    div.appendChild(close);
+    div.appendChild(document.createTextNode(title));
+    if (lines && lines.length) {
+      var ul = document.createElement('ul');
+      for (var i = 0; i < lines.length; i++) {
+        var li = document.createElement('li');
+        li.textContent = lines[i];
+        ul.appendChild(li);
+      }
+      div.appendChild(ul);
+    }
+    box.appendChild(div);
+  }
+
+  // ==========================================================================
+  // 导入 / 导出
+  // ==========================================================================
+  function handleFile(file) {
+    file.text().then(function (text) {
+      var model = L.parseCSV(text);
+      if (model.items.length === 0 && model.errors.length) {
+        showMsg('error', '导入失败：未能解析任何组件行', model.errors.map(fmtError));
+        return;
+      }
+      // 设置重置基准
+      for (var i = 0; i < model.items.length; i++) {
+        var it = model.items[i];
+        it.orig = { x: it.x, y: it.y };
+      }
+      state.model = model;
+      state.fileName = file.name;
+      state.pageIndex = 0;
+      state.selectedId = null;
+      history.clear();
+
+      // 页面切换下拉
+      var sel = $('pageSelect');
+      sel.textContent = '';
+      model.pages.forEach(function (pg, idx) {
+        var opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = pg.name + '（' + pg.items.length + '）';
+        sel.appendChild(opt);
+      });
+      sel.disabled = model.pages.length === 0;
+      sel.value = '0';
+
+      $('fileLabel').textContent = file.name;
+      $('fileLabel').title = file.name;
+      $('statusFile').textContent = '已导入：' + file.name + '（共 ' + model.items.length + ' 个组件，' + model.pages.length + ' 页）';
+      ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit'].forEach(function (id) { $(id).disabled = false; });
+
+      renderPage();
+      renderList();
+      updateToolbar();
+      requestAnimationFrame(fitToWindow);
+
+      // 导入提示：数量 + 四舍五入 + 错误行
+      var notes = [];
+      if (model.roundNotes.length) {
+        notes = model.roundNotes.map(function (r) {
+          return '第 ' + r.line + ' 行（Id: ' + r.id + '）字段 ' + r.fields.join('/') + ' 含小数，已四舍五入';
+        });
+      }
+      if (model.errors.length) {
+        showMsg('warn', '导入完成：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页；' + model.errors.length + ' 行错误未导入', model.errors.map(fmtError));
+      }
+      if (notes.length) {
+        showMsg('warn', model.roundNotes.length + ' 行坐标含小数，已四舍五入（详见列表）', notes);
+      }
+      if (!model.errors.length && !notes.length) {
+        showMsg('', '导入成功：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页');
+      }
+    }).catch(function (err) {
+      showMsg('error', '读取文件失败：' + err.message);
+    });
+  }
+
+  function fmtError(e) {
+    return '第 ' + e.line + ' 行 / Id: ' + e.id + ' / 字段 ' + e.field + '：' + e.msg;
+  }
+
+  function exportFile() {
+    if (!state.model) return;
+    var csv = '﻿' + L.serializeCSV(state.model); // ﻿ = UTF-8 BOM（\uFEFF）
+    var base = state.fileName.replace(/\.csv$/i, '');
+    var outName = base + '-modified.csv';
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = outName;
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    showMsg('', '已导出 ' + outName + '（' + state.model.items.length + ' 个组件，含未修改页；改动 ' + modifiedCount() + ' 个）');
+  }
+
+  // ==========================================================================
+  // 交互层：拖拽 / 平移 / 缩放
+  // ==========================================================================
+  var drag = null; // { mode:'move'|'pan', item, startCanvas, origPos, lastPos, moved }
+
+  /** 捕获指针；合成事件无活动指针时会抛错，忽略即可 */
+  function capturePointer(e) {
+    try { svg.setPointerCapture(e.pointerId); } catch (err) { /* 非真实指针，忽略 */ }
+  }
+
+  function onItemPointerDown(e, item) {
+    if (e.button !== 0 || state.spaceHeld) return; // 空格/中键 = 平移
+    e.stopPropagation();
+    selectItem(item.id);
+    var c = screenToCanvas(e.clientX, e.clientY);
+    drag = { mode: 'move', item: item, pointerId: e.pointerId, startCanvas: c, origPos: { x: item.x, y: item.y }, curPos: { x: item.x, y: item.y }, startScreen: { x: e.clientX, y: e.clientY }, moved: false };
+    capturePointer(e);
+  }
+
+  function onBlankPointerDown(e) {
+    if (e.button !== 0 && e.button !== 1) return;
+    startPan(e);
+  }
+
+  function startPan(e) {
+    drag = { mode: 'pan', pointerId: e.pointerId, startScreen: { x: e.clientX, y: e.clientY }, startPan: { x: state.pan.x, y: state.pan.y } };
+    capturePointer(e);
+    workspace.classList.add('panning');
+  }
+
+  svg.addEventListener('pointerdown', function (e) {
+    // 空白处（未命中组件/背景 rect 已各自处理）；svg 根上兜底启动平移
+    if (e.target === svg) startPan(e);
+  });
+
+  svg.addEventListener('pointermove', function (e) {
+    // 悬停坐标（US-04）：画布整数坐标
+    var c = screenToCanvas(e.clientX, e.clientY);
+    var hud = $('hudMouse');
+    if (c.x >= 0 && c.x <= CW && c.y >= 0 && c.y <= CH) {
+      hud.style.display = '';
+      hud.textContent = '鼠标  X:' + Math.round(c.x) + '  Y:' + Math.round(c.y);
+    } else {
+      hud.style.display = 'none';
+    }
+
+    if (!drag) return;
+    if (drag.mode === 'pan') {
+      state.pan.x = drag.startPan.x + (e.clientX - drag.startScreen.x);
+      state.pan.y = drag.startPan.y + (e.clientY - drag.startScreen.y);
+      applyTransform();
+      return;
+    }
+    // mode = move
+    if (!drag.moved) {
+      var dxs = e.clientX - drag.startScreen.x, dys = e.clientY - drag.startScreen.y;
+      if (Math.sqrt(dxs * dxs + dys * dys) < DRAG_THRESHOLD) return;
+      drag.moved = true;
+      // 原位置保留虚线轮廓（世界坐标，不随拖动元素移动）
+      var ghost = $('dragGhost');
+      ghost.setAttribute('x', drag.item.x);
+      ghost.setAttribute('y', drag.item.y);
+      ghost.setAttribute('width', drag.item.w);
+      ghost.setAttribute('height', drag.item.h);
+      ghost.setAttribute('style', 'pointer-events:none');
+    }
+    var rawX = drag.origPos.x + (c.x - drag.startCanvas.x);
+    var rawY = drag.origPos.y + (c.y - drag.startCanvas.y);
+    var snapped = applySnap(rawX, rawY);
+    var clamped = clampToCanvas(drag.item, snapped.x, snapped.y);
+    drag.curPos = clamped;
+    // 只更新受影响元素：被拖组件的 transform + HUD
+    positionItem(itemEls[drag.item.id], { x: clamped.x, y: clamped.y, w: drag.item.w, h: drag.item.h });
+    var hudD = $('hudDrag');
+    hudD.style.display = '';
+    hudD.textContent = '拖拽  x:' + clamped.x + '  y:' + clamped.y +
+      '  w:' + drag.item.w + '  h:' + drag.item.h +
+      '  Δx:' + (clamped.x - drag.origPos.x) + '  Δy:' + (clamped.y - drag.origPos.y);
+  });
+
+  function endDrag(e) {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    workspace.classList.remove('panning');
+    if (d.mode === 'move') {
+      $('dragGhost').setAttribute('style', 'display:none;pointer-events:none');
+      $('hudDrag').style.display = 'none';
+      if (d.moved) {
+        execute(makeMoveCommand(d.item, d.origPos, d.curPos));
+      } else {
+        updateSelectionUI(); // 纯点击选中
+      }
+    }
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', function () {
+    if (drag && drag.mode === 'move' && drag.moved) {
+      // 取消拖拽：恢复原位，不产生命令
+      positionItem(itemEls[drag.item.id], drag.item);
+      $('dragGhost').setAttribute('style', 'display:none;pointer-events:none');
+      $('hudDrag').style.display = 'none';
+    }
+    drag = null;
+    workspace.classList.remove('panning');
+  });
+
+  // 滚轮缩放（以鼠标为中心，25%~400%，不改变任何坐标）
+  workspace.addEventListener('wheel', function (e) {
+    if (!state.model) return;
+    e.preventDefault();
+    var r = workspace.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var factor = Math.exp(-e.deltaY * 0.0012);
+    var z2 = Math.min(Math.max(state.zoom * factor, MIN_ZOOM), MAX_ZOOM);
+    // 鼠标下的世界点保持不动：pan' = m - (m - pan) * (z2/z)
+    var k = z2 / state.zoom;
+    state.pan.x = mx - (mx - state.pan.x) * k;
+    state.pan.y = my - (my - state.pan.y) * k;
+    state.zoom = z2;
+    applyTransform();
+  }, { passive: false });
+
+  // ==========================================================================
+  // 工具栏 / 键盘事件绑定
+  // ==========================================================================
+  $('btnImport').addEventListener('click', function () { $('fileInput').click(); });
+  $('fileInput').addEventListener('change', function (e) {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('btnExport').addEventListener('click', exportFile);
+  $('btnFit').addEventListener('click', fitToWindow);
+
+  $('btnSnapGrid').addEventListener('click', function () {
+    state.snapGrid = !state.snapGrid;
+    this.classList.toggle('on', state.snapGrid);
+  });
+  $('btnSnapComp').addEventListener('click', function () {
+    state.snapComp = !state.snapComp; // [S2] 仅切换状态，吸附逻辑 Sprint 2 实现
+    this.classList.toggle('on', state.snapComp);
+    showMsg('', '组件吸附：' + (state.snapComp ? '开' : '关') + '（吸附逻辑将于 Sprint 2 提供）');
+  });
+
+  $('btnUndo').addEventListener('click', function () { history.undo(); syncAfterDataChange(); });
+  $('btnRedo').addEventListener('click', function () { history.redo(); syncAfterDataChange(); });
+  $('btnReset').addEventListener('click', function () {
+    var changes = [];
+    for (var i = 0; i < state.model.items.length; i++) {
+      var it = state.model.items[i];
+      if (isModified(it)) changes.push({ item: it, from: { x: it.orig.x, y: it.orig.y }, to: { x: it.x, y: it.y } });
+    }
+    if (!changes.length) { showMsg('', '当前没有任何改动'); return; }
+    execute(makeResetCommand(changes));
+  });
+
+  $('pageSelect').addEventListener('change', function (e) {
+    state.pageIndex = Number(e.target.value);
+    state.selectedId = null;
+    renderPage();
+    renderList();
+  });
+
+  // 键盘：Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z；空格 = 临时平移
+  // [S2] 方向键微调、Shift 直线移动在这里扩展
+  window.addEventListener('keydown', function (e) {
+    if (e.key === ' ' && !e.ctrlKey && !e.metaKey) {
+      state.spaceHeld = true;
+      workspace.classList.add('space-held');
+      e.preventDefault();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); history.undo(); syncAfterDataChange();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+      e.preventDefault(); history.redo(); syncAfterDataChange();
+    }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.key === ' ') { state.spaceHeld = false; workspace.classList.remove('space-held'); }
+  });
+
+  // 拖文件到页面导入
+  var dragCounter = 0;
+  window.addEventListener('dragenter', function (e) { e.preventDefault(); dragCounter++; document.body.classList.add('dragging-file'); });
+  window.addEventListener('dragleave', function (e) { e.preventDefault(); if (--dragCounter <= 0) { dragCounter = 0; document.body.classList.remove('dragging-file'); } });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dragCounter = 0;
+    document.body.classList.remove('dragging-file');
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+
+  // 窗口尺寸变化时保持可用（不自动改缩放，避免打扰）
+  window.addEventListener('resize', function () { applyTransform(); });
+})();
+</script>
+</body>
+</html>
