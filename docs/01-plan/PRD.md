@@ -25,11 +25,11 @@
 ## 6. 输入 / 输出格式
 **格式：CSV（UTF-8 带 BOM），只接受 CSV；输入与输出结构完全一致。** 多页报表放在同一个 CSV 里，用 `Page` 列区分，网页按页切换显示。
 
-- 列固定为：`Page, Id, Type, X, Y, Width, Height`，一行一个视觉（即现有脚本的输出，仅坐标改为整数）。
+- 列固定为：`Page, Id, Type, Title, X, Y, Width, Height, Z`，一行一个视觉。`Title` = 视觉标题（无标题则取第一个绑定字段名，仅供显示，只读透传）；`Z` = `position.z`（层次，数值越大越靠上）。网页兼容缺少 `Title`/`Z` 列的旧 CSV（无 Z 时禁用层次调整）。
 - `X/Y/Width/Height` 一律**整数**（脚本导出时四舍五入）；原点左上角，画布 1280×720。
-- 网页只允许修改 `X/Y/Width/Height`，其余列原样透传（含 `Page` 前后空格，不 trim）；行顺序不变。
+- 网页只允许修改 `X/Y/Width/Height/Z`，其余列原样透传（含 `Page` 前后空格，不 trim）；行顺序不变。
 - 提取阶段报表**不使用群组**，不处理群组偏移；隐藏视觉不导出。
-- 回写时只用 `Id` 在 `.Report/definition/pages/*/visuals/*/visual.json` 中定位（`name` 字段），只改 `position.x/y/width/height`。
+- 回写时只用 `Id` 在 `.Report/definition/pages/*/visuals/*/visual.json` 中定位（`name` 字段），只改 `position.x/y/width/height/z`。
 - 样例：`docs/01-plan/io-samples/`。提取脚本已完成（`scripts/Get-VisualLayout.ps1`）；回写由用户自行处理，不在本工具范围。
 
 ## 7. 版面与交互设计原则
