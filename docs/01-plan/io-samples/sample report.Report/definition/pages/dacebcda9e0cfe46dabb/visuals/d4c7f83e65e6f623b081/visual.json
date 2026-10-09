@@ -1,0 +1,99 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "d4c7f83e65e6f623b081",
+  "position": {
+    "x": 1085,
+    "y": 540,
+    "z": 5,
+    "height": 465,
+    "width": 777.5,
+    "tabOrder": 5
+  },
+  "visual": {
+    "visualType": "treemap",
+    "query": {
+      "queryState": {
+        "Group": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "销售明细"
+                    }
+                  },
+                  "Property": "区域"
+                }
+              },
+              "queryRef": "销售明细.区域",
+              "nativeQueryRef": "区域",
+              "active": true
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "销售明细"
+                        }
+                      },
+                      "Property": "销售额"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(销售明细.销售额)",
+              "nativeQueryRef": "销售额 的总和"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "203126eb246bfc624299",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "销售明细"
+              }
+            },
+            "Property": "区域"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e82ca4840fd72eeb0af2",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "销售明细"
+                  }
+                },
+                "Property": "销售额"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

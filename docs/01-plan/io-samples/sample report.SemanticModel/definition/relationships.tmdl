@@ -1,0 +1,5 @@
+relationship 54b4142f-98e2-4c2a-b241-eeda5c428e7e
+	joinOnDateBehavior: datePartOnly
+	fromColumn: 销售明细.日期
+	toColumn: LocalDateTable_aa84e401-6f32-4d68-a508-9ee26e1d9877.Date
+

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "e528a60272d8eaad788e",
+  "position": {
+    "x": 25,
+    "y": 930,
+    "z": 8,
+    "height": 150,
+    "width": 325,
+    "tabOrder": 8
+  },
+  "visual": {
+    "visualType": "slicer",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "销售明细"
+                    }
+                  },
+                  "Property": "客户等级"
+                }
+              },
+              "queryRef": "销售明细.客户等级",
+              "nativeQueryRef": "客户等级",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "data": [
+        {
+          "properties": {
+            "mode": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Dropdown'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "1c90520e29d28cbd0b72",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "销售明细"
+              }
+            },
+            "Property": "客户等级"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

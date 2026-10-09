@@ -1,0 +1,21 @@
+model Model
+	culture: zh-CN
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: zh-TW
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["销售明细"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table 销售明细
+ref table DateTableTemplate_70f0d2f7-3fa2-4d53-8dd4-5f02c9d9baae
+ref table LocalDateTable_aa84e401-6f32-4d68-a508-9ee26e1d9877
+
+ref cultureInfo zh-CN
+

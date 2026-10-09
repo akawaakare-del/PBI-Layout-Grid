@@ -1,0 +1,122 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "b841082451ecb87e7203",
+  "position": {
+    "x": 927.5,
+    "y": 160,
+    "z": 4,
+    "height": 342.5,
+    "width": 935,
+    "tabOrder": 4
+  },
+  "visual": {
+    "visualType": "barChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "销售明细"
+                    }
+                  },
+                  "Property": "客户等级"
+                }
+              },
+              "queryRef": "销售明细.客户等级",
+              "nativeQueryRef": "客户等级",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "销售明细"
+                        }
+                      },
+                      "Property": "销售额"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(销售明细.销售额)",
+              "nativeQueryRef": "销售额 的总和"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Aggregation": {
+                "Expression": {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Entity": "销售明细"
+                      }
+                    },
+                    "Property": "销售额"
+                  }
+                },
+                "Function": 0
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "fbc9df2a4a3dc6f0958d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "销售明细"
+              }
+            },
+            "Property": "客户等级"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0589873954a855e55dd8",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "销售明细"
+                  }
+                },
+                "Property": "销售额"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

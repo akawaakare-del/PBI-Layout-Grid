@@ -1,0 +1,83 @@
+table 销售明细
+	lineageTag: 9d1b9211-260f-490c-a73f-99c79a03829f
+
+	column 日期
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 3c2a6498-8b94-4d1c-b435-528cacbbec32
+		summarizeBy: none
+		sourceColumn: 日期
+
+		variation 变体
+			isDefault
+			relationship: 54b4142f-98e2-4c2a-b241-eeda5c428e7e
+			defaultHierarchy: LocalDateTable_aa84e401-6f32-4d68-a508-9ee26e1d9877.日期层次结构
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column 区域
+		dataType: string
+		lineageTag: 9ad6c76f-55ec-488f-9561-2e31bb8ff61b
+		summarizeBy: none
+		sourceColumn: 区域
+
+		annotation SummarizationSetBy = Automatic
+
+	column 产品类别
+		dataType: string
+		lineageTag: 1282baf6-c8bf-4539-95f3-6d39e73994f2
+		summarizeBy: none
+		sourceColumn: 产品类别
+
+		annotation SummarizationSetBy = Automatic
+
+	column 销售渠道
+		dataType: string
+		lineageTag: 772076df-2623-4234-996f-d551235c0e5f
+		summarizeBy: none
+		sourceColumn: 销售渠道
+
+		annotation SummarizationSetBy = Automatic
+
+	column 客户等级
+		dataType: string
+		lineageTag: 7eb979d7-2803-4601-b1a1-b2ae656c9205
+		summarizeBy: none
+		sourceColumn: 客户等级
+
+		annotation SummarizationSetBy = Automatic
+
+	column 销售额
+		dataType: double
+		lineageTag: 93b03a49-355e-4cef-bddc-49bb2d845480
+		summarizeBy: sum
+		sourceColumn: 销售额
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 订单数
+		dataType: int64
+		formatString: 0
+		lineageTag: f1086433-3978-47df-b29c-6ccc1da07803
+		summarizeBy: sum
+		sourceColumn: 订单数
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 销售明细 = m
+		mode: import
+		source =
+				let
+				    Source = Excel.Workbook(File.Contents("D:\Git Hub\PBI-Layout-Grid\docs\01-plan\io-samples\假数据-100行.xlsx"), null, true),
+				    销售明细_Sheet = Source{[Item="销售明细",Kind="Sheet"]}[Data],
+				    #"Promoted Headers" = Table.PromoteHeaders(销售明细_Sheet, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"日期", type date}, {"区域", type text}, {"产品类别", type text}, {"销售渠道", type text}, {"客户等级", type text}, {"销售额", type number}, {"订单数", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
