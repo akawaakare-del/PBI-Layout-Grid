@@ -1028,11 +1028,11 @@
         : i === 2 ? '(' + item.x + ', ' + (item.y + item.h) + ')'
         : '(' + (item.x + item.w) + ', ' + (item.y + item.h) + ')';
       var s = worldToScreen(cfg[i][1], cfg[i][2]);
-      var x = s.x + cfg[i][3] * 5, y = s.y + cfg[i][4] * 5;
+      var x = s.x + cfg[i][4] * 5, y = s.y + cfg[i][5] * 5;
       x = Math.min(Math.max(x, c0.x + 2), c1.x - 72);
       y = Math.min(Math.max(y, c0.y + 2), c1.y - 14);
       div.textContent = label;
-      div.style.transform = cfg[i][5];
+      div.style.transform = cfg[i][6];
       div.style.left = x + 'px'; div.style.top = y + 'px';
       div.style.display = 'block';
     }
