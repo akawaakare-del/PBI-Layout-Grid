@@ -91,7 +91,8 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
 }
 
 // ============================================================================
-// 5. 真实样例：68 个组件、1 页，小数全部四舍五入并记录提示
+// 5. 真实样例：68 个组件、1 页，新格式（含 Title/Z 列）
+//    说明：当前样例坐标已全部为整数（无小数行），roundNotes 应为 0
 // ============================================================================
 {
   const sample = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'docs', '01-plan', 'io-samples', 'Project Portfolio Tracker-layout.csv'), 'utf8');
@@ -100,10 +101,17 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
   eq(model.pages.length, 1, '样例：1 页');
   eq(model.pages[0].name, '  嘉聯', '样例：Page 前导空格保留');
   eq(model.errors.length, 0, '样例：无错误行');
-  ok(model.roundNotes.length > 0, '样例：含小数行已记录四舍五入提示（共 ' + model.roundNotes.length + ' 行）');
+  ok(model.hasTitle && model.hasZ, '样例：识别出 Title 与 Z 列');
+  eq(model.header.join(','), 'Page,Id,Type,Title,X,Y,Width,Height,Z', '样例：列顺序以输入为准');
+  eq(model.roundNotes.length, 0, '样例：坐标均为整数，无四舍五入提示');
   ok(model.items.every(i => Number.isInteger(i.x) && Number.isInteger(i.y) && Number.isInteger(i.w) && Number.isInteger(i.h)), '样例：所有坐标为整数');
-  // 行顺序保持：第 3 行（Id d8e48a...）的 Width 114.3 -> 114
-  eq(model.items[1].w, 114, '样例：第 2 个组件 Width 114.3 四舍五入为 114');
+  // 行顺序保持：第 2 行（Id 0f7596...）是 top_bg，宽 220 通栏背景
+  eq(model.items[1].w, 220, '样例：第 2 个组件 top_bg 宽度 220');
+  // Title 解析：第 1 行 Title 为 "已完成数"，存在空 Title 行
+  eq(model.items[0].title, '已完成数', '样例：Title 原样解析');
+  ok(model.items.some(i => i.title === ''), '样例：空 Title（不带引号空值）解析为空串');
+  // Z 解析：不连续整数
+  ok(model.items.some(i => i.z === 17000), '样例：Z=17000 解析正确');
 }
 
 // ============================================================================
@@ -380,6 +388,175 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
   eq(L.dominantAxis(-10, 3), 'h', '锁轴：负位移同样按绝对值判定');
   eq(L.dominantAxis(3, -10), 'v', '锁轴：dy 为负锁垂直');
   eq(L.dominantAxis(0, 0), 'h', '锁轴：零位移取水平');
+}
+
+// ============================================================================
+// 18. Sprint 3 CSV：新列解析（Title 含逗号/引号/中文、空 Title 不带引号、Z 重复/空）
+// ============================================================================
+{
+  const csv = '"Page","Id","Type","Title","X","Y","Width","Height","Z"\n' +
+    '"P1","a","textbox","标题,带逗号","0","0","100","50","0"\n' +
+    '"P1","b","textbox","引""号""","10","10","100","50","1000"\n' +
+    '"P1","c","shape",,"20","20","100","50","1000"\n' +        // 空 Title 不带引号；Z 与上行重复
+    '"P1","d","shape",,"30","30","100","50",\n';               // 空 Z
+  const model = L.parseCSV(csv);
+  eq(model.items.length, 4, '新格式：4 行全部导入');
+  eq(model.errors.length, 0, '新格式：无错误');
+  eq(model.items[0].title, '标题,带逗号', 'Title 字段内逗号保留');
+  eq(model.items[1].title, '引"号"', 'Title 字段内引号 "" 转义为 "');
+  eq(model.items[2].title, '', '空 Title（不带引号空值）为空串');
+  eq(model.items[2].z, 1000, 'Z 重复值保留');
+  eq(model.items[3].z, null, '空 Z 视为无层次（按行序）');
+  // Z 非整数 -> 错误行
+  const bad = '"Page","Id","Type","Title","X","Y","Width","Height","Z"\n' +
+    '"P1","e","textbox","t","0","0","100","50","1.5"\n';
+  const m2 = L.parseCSV(bad);
+  eq(m2.items.length, 0, 'Z=1.5 非整数：该行报错');
+  ok(m2.errors.some(e => e.field === 'Z' && /不是整数/.test(e.msg)), 'Z 非整数提示正确');
+}
+
+// ============================================================================
+// 19. Sprint 3 CSV：列顺序以输入为准；缺 Title/Z 的旧格式兼容；导出同构
+// ============================================================================
+{
+  // 列顺序变化：Title 在最后、Z 在 Type 后
+  const csv = '"Page","Id","Type","Z","X","Y","Width","Height","Title"\n' +
+    '"P1","a","textbox","2000","0","0","100","50","名称A"\n';
+  const model = L.parseCSV(csv);
+  eq(model.items[0].z, 2000, '列序变化：Z 仍按表头名解析');
+  eq(model.items[0].title, '名称A', '列序变化：Title 仍按表头名解析');
+  const out = L.serializeCSV(model);
+  const lines = out.trim().split('\n');
+  eq(lines[0], csv.trim().split('\n')[0], '导出表头与输入逐字一致（列序不变）');
+  ok(lines[1].includes('"名称A"'), '导出 Title 透传');
+  ok(lines[1].includes('"2000"'), '导出 Z 透传');
+
+  // 旧格式：无 Title/Z 列
+  const old = '"Page","Id","Type","X","Y","Width","Height"\n' +
+    '"P1","a","textbox","0","0","100","50"\n';
+  const m2 = L.parseCSV(old);
+  ok(!m2.hasTitle && !m2.hasZ, '旧格式：hasTitle/hasZ 为 false');
+  eq(m2.items[0].title, '', '旧格式：Title 缺省为空串');
+  eq(m2.items[0].z, null, '旧格式：Z 缺省为 null');
+  eq(L.serializeCSV(m2), old, '旧格式：导出列集合与输入完全一致（不凭空新增列）');
+
+  // Z 修改后导出：只有 Z 值变化；空 Title 导出 ""
+  m2.items[0].z = 5; // 无 Z 列时不影响导出（列不存在）
+  const csv3 = '"Page","Id","Type","Title","X","Y","Width","Height","Z"\n' +
+    '"P1","a","textbox","","0","0","100","50","0"\n';
+  const m3 = L.parseCSV(csv3);
+  m3.items[0].z = 3000;
+  const out3 = L.serializeCSV(m3).trim().split('\n');
+  ok(out3[1].endsWith('"3000"'), '修改 Z 后导出 Z=3000');
+  ok(out3[1].includes('"",'), '空 Title 导出为 ""');
+}
+
+// ============================================================================
+// 20. Sprint 3 Z 重分配：不连续 / 重复 / 置顶置底 / 已在顶底 / 范围外不变
+//     约定：纯函数不改 item.z，新 Z 值读 changes（from/to）；
+//     Z 集合升序重新分配给新序列（无负数、无巨大新值，只有移动范围内变化）
+// ============================================================================
+{
+  const mk = (id, z, row) => ({ id, z, row });
+  // 不连续 Z：A0 B1000 C2000 D3000；把 A 置顶 -> 序列 B,C,D,A，整个序列 Z 都会变化
+  let items = [mk('A', 0, 0), mk('B', 1000, 1), mk('C', 2000, 2), mk('D', 3000, 3)];
+  let res = L.computeZReorder(items, 'A', 'top');
+  eq(res.order.map(i => i.id).join(','), 'B,C,D,A', '置顶：序列末尾为最顶层');
+  eq(res.changes.length, 4, '置顶：Z 全不相同时整个序列 Z 重新分配（4 项变化）');
+  eq(items[0].z, 0, '原 Z 集合不变（纯逻辑不写入）');
+  // 新序列 B,C,D,A 分配原集合 [0,1000,2000,3000]
+  const toOf = (r, id) => r.changes.find(c => c.item.id === id).to;
+  eq(toOf(res, 'A'), 3000, 'A 置顶取最大已有值 3000（无巨大新值）');
+  eq(toOf(res, 'B'), 0, 'B 被压到原集合最小值 0（无负数）');
+  eq(toOf(res, 'C'), 1000, 'C 变为 1000');
+  eq(toOf(res, 'D'), 2000, 'D 变为 2000');
+
+  // 下移一层：D(top) 下移 -> 仅 D/C 两个组件变化
+  items = [mk('A', 0, 0), mk('B', 1000, 1), mk('C', 2000, 2), mk('D', 3000, 3)];
+  res = L.computeZReorder(items, 'D', 'down');
+  eq(res.order.map(i => i.id).join(','), 'A,B,D,C', '下移：D 与 C 交换位置');
+  eq(res.changes.length, 2, '下移：仅 D/C 两个组件变化');
+  eq(toOf(res, 'D'), 2000, 'D 下移后 Z=2000');
+  eq(toOf(res, 'C'), 3000, 'C 变为 3000');
+  ok(!res.changes.some(c => c.item.id === 'A' || c.item.id === 'B'), '范围外 A/B 不在变化列表中');
+
+  // Z 重复：平局由 row 打破，组内移动 Z 集合不变 -> 零变化
+  items = [mk('A', 0, 0), mk('B', 0, 1), mk('C', 1000, 2)];
+  res = L.computeZReorder(items, 'A', 'up');
+  eq(res.order.map(i => i.id).join(','), 'B,A,C', 'Z 重复：序列 A(0,r0),B(0,r1),C(1000)，A 上移与 B 交换');
+  eq(res.changes.length, 0, 'Z 重复：组内交换后仍分配 [0,0,1000]，零变化（不产生命令）');
+
+  // 置底：D 置底 -> 序列 D,A,B,C，整个序列变化
+  items = [mk('A', 0, 0), mk('B', 1000, 1), mk('C', 2000, 2), mk('D', 3000, 3)];
+  res = L.computeZReorder(items, 'D', 'bottom');
+  eq(res.order.map(i => i.id).join(','), 'D,A,B,C', '置底：序列首位为最底层');
+  eq(res.changes.length, 4, '置底：整个序列 Z 重新分配');
+  eq(toOf(res, 'D'), 0, 'D 置底取最小已有值 0');
+  eq(toOf(res, 'A'), 1000, 'A 变为 1000');
+  eq(toOf(res, 'C'), 3000, 'C 变为 3000');
+
+  // 已在顶/底：无变化
+  items = [mk('A', 0, 0), mk('B', 1000, 1)];
+  res = L.computeZReorder(items, 'B', 'top');
+  eq(res.changes.length, 0, '已在顶：置顶无变化（不产生命令）');
+  res = L.computeZReorder(items, 'A', 'bottom');
+  eq(res.changes.length, 0, '已在底：置底无变化');
+  res = L.computeZReorder(items, 'B', 'up');
+  eq(res.changes.length, 0, '已在顶：上移无变化');
+  res = L.computeZReorder(items, 'A', 'down');
+  eq(res.changes.length, 0, '已在底：下移无变化');
+  eq(L.computeZReorder(items, 'X', 'top'), null, '组件不在页内返回 null');
+}
+
+// ============================================================================
+// 21. Sprint 3 搜索匹配：大小写不敏感 / 空格分词交集 / Title+Type+Id
+// ============================================================================
+{
+  ok(L.matchSearch('', '标题', 'textbox', 'abc123'), '空查询恒匹配');
+  ok(L.matchSearch('  ', '标题', 'textbox', 'abc123'), '纯空白查询恒匹配');
+  ok(L.matchSearch('标题', '销售 标题', 'textbox', 'abc123'), 'Title 子串匹配');
+  ok(L.matchSearch('TEXTBOX', '销售 标题', 'textbox', 'abc123'), '大小写不敏感');
+  ok(L.matchSearch('text', '标题', 'textbox', 'abc123'), 'Type 子串匹配');
+  ok(L.matchSearch('ABC', '标题', 'textbox', 'abc123'), 'Id 子串匹配');
+  ok(L.matchSearch('标题 textbox', '销售 标题', 'textbox', 'abc123'), '空格分词取交集：两个词都命中');
+  ok(!L.matchSearch('标题 shape', '销售 标题', 'textbox', 'abc123'), '空格分词取交集：有一个词不命中则过滤');
+  ok(!L.matchSearch('不存在', '标题', 'textbox', 'abc123'), '无命中返回 false');
+}
+
+// ============================================================================
+// 22. Sprint 3 草稿：序列化/解析往返；损坏/版本不符/结构非法安全丢弃
+// ============================================================================
+{
+  const draft = {
+    v: L.DRAFT_VERSION, fileName: 'a.csv', csvText: '"Page",...\n', savedAt: '2026-10-09T10:00:00.000Z',
+    pageIndex: 0, points: { P1: [{ x: 1, y: 2, name: '点 1' }] },
+    lockedIds: ['a'], items: { a: { x: 1, y: 2, w: 3, h: 4, z: 5 }, b: { x: 0, y: 0, w: 10, h: 10, z: null } }
+  };
+  const back = L.parseDraft(L.serializeDraft(draft));
+  ok(back && back.items.a.x === 1 && back.items.b.z === null, '草稿：往返一致');
+  eq(back.lockedIds.length, 1, '草稿：锁定集合往返一致');
+  eq(back.points.P1[0].name, '点 1', '草稿：坐标点往返一致');
+  eq(L.parseDraft('{not json'), null, '草稿：损坏 JSON 安全丢弃');
+  eq(L.parseDraft('{"v":999,"fileName":"x","csvText":"","savedAt":"","pageIndex":0,"items":{},"lockedIds":[],"points":{}}'), null, '草稿：版本不符丢弃');
+  eq(L.parseDraft('{"v":' + L.DRAFT_VERSION + ',"fileName":"x","csvText":"","savedAt":"","pageIndex":-1,"items":{},"lockedIds":[],"points":{}}'), null, '草稿：pageIndex 非法丢弃');
+  eq(L.parseDraft('{"v":' + L.DRAFT_VERSION + ',"fileName":"x","csvText":"","savedAt":"","pageIndex":0,"items":{"a":{"x":"bad"}},"lockedIds":[],"points":{}}'), null, '草稿：items 数值非法丢弃');
+  eq(L.parseDraft('{"v":' + L.DRAFT_VERSION + ',"fileName":"x","csvText":"","savedAt":"","pageIndex":0,"items":{},"lockedIds":"nope","points":{}}'), null, '草稿：lockedIds 非数组丢弃');
+}
+
+// ============================================================================
+// 23. Sprint 3 蓝图 16:9 判定：精确 / 容差边界 / 容差外 / 非正数
+// ============================================================================
+{
+  ok(L.is169(1600, 900), '16:9 精确通过');
+  ok(L.is169(1280, 720), '1280×720 通过');
+  // 下边界：ratio = 16/9*0.99 通过；再小 1% 拒绝
+  ok(L.is169(16 * 0.99, 9), '比例恰在 -1% 容差边界通过');
+  ok(!L.is169(16 * 0.989, 9), '超出 -1% 容差拒绝');
+  ok(L.is169(16 * 1.01, 9), '比例恰在 +1% 容差边界通过');
+  ok(!L.is169(16 * 1.011, 9), '超出 +1% 容差拒绝');
+  ok(!L.is169(0, 9), '宽为 0 拒绝');
+  ok(!L.is169(1600, 0), '高为 0 拒绝');
+  ok(!L.is169(1200, 900), '4:3 拒绝');
 }
 
 console.log('----------------------------------------');

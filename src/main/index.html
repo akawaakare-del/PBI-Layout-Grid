@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PBI Layout Grid — 布局调整工具（Sprint 2）</title>
+<title>PBI Layout Grid — 布局调整工具（Sprint 3）</title>
 <style>
   /* ============ 基础与布局（浅色主题，颜色集中于此便于换肤） ============ */
   :root {
@@ -95,7 +95,39 @@
   #vertexPanel { margin-top: 8px; font-size: 11px; color: var(--text-dim); font-family: Consolas, monospace; line-height: 1.7; }
   #vertexPanel .vp-row { display: flex; justify-content: space-between; }
   #vertexPanel .vp-row b { color: var(--text); font-weight: 600; }
-  #vertexPanel label.show-corners { display: flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 4px; font-family: inherit; cursor: pointer; }
+  /* 选中组件信息（坐标窗口顶部：Type / Title / 完整 Id） */
+  #selInfo { margin-bottom: 8px; font-size: 11px; line-height: 1.6; color: var(--text-dim);
+    border-bottom: 1px dashed var(--border); padding-bottom: 6px; word-break: break-all; }
+  #selInfo b { color: var(--text); }
+  /* 层次（Z）调整按钮行 */
+  #zRow { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
+  #zRow button { flex: 1; padding: 2px 0; font-size: 11px; }
+  #zRow .z-val { color: var(--text-dim); font-size: 11px; min-width: 30px; text-align: right; }
+
+  /* Sprint 3：搜索框 / 锁 / 蓝图 / 草稿横幅 */
+  #searchBox { padding: 5px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; }
+  #searchBox input {
+    flex: 1; min-width: 0; padding: 3px 6px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--text);
+    font-family: inherit;
+  }
+  #searchBox input:focus { outline: none; border-color: var(--accent); }
+  #compList .row .lock {
+    cursor: pointer; flex: none; font-size: 12px; width: 16px; text-align: center;
+    color: var(--text-dim); user-select: none;
+  }
+  #compList .row .lock.on { color: var(--accent); }
+  #compList .row .title { overflow: hidden; text-overflow: ellipsis; }
+  #compList .row.locked .type, #compList .row.locked .title { opacity: .5; }
+  #blueprintPanel { padding: 6px 10px; font-size: 12px; color: var(--text-dim); }
+  #blueprintPanel .bp-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  #blueprintPanel input[type=range] { flex: 1; }
+  #draftBanner {
+    display: none; align-items: center; gap: 10px; padding: 6px 12px;
+    background: #fff7e0; border-bottom: 1px solid #e8c97a; color: #6b5312; font-size: 12px;
+  }
+  body.has-draft #draftBanner { display: flex; }
+  #draftBanner button { padding: 2px 10px; }
 
   #compListWrap { flex: 1; overflow-y: auto; min-height: 0; }
   #compList .row {
@@ -155,15 +187,7 @@
   #hudSelection { top: 10px; left: 10px; display: none; }
   #hudMouse { bottom: 10px; left: 10px; display: none; }
   #hudDrag { top: 10px; left: 200px; display: none; color: #8a5a12; }
-  #hudZoom { bottom: 10px; right: 10px; color: var(--text-dim); box-shadow: none; }
 
-  /* 角坐标标签：屏幕固定字号，不随缩放变化 */
-  .corner-label {
-    position: absolute; z-index: 4; pointer-events: none;
-    font: 10px Consolas, monospace; white-space: nowrap;
-    background: #fff8e6; border: 1px solid #e8c97a; color: #7a5c14;
-    border-radius: 2px; padding: 0 3px; display: none;
-  }
   /* 吸附间距标签 */
   .gap-label {
     position: absolute; z-index: 4; pointer-events: none;
@@ -196,6 +220,10 @@
   .item .handle { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
   .item .mod-badge { display: none; }
   .item.modified .mod-badge { display: block; }
+  /* 锁定组件：画布上淡化 + 小锁标记，且 pointer-events:none 穿透到下层组件 */
+  .item.locked { opacity: .45; pointer-events: none; }
+  .item .lock-badge { display: none; }
+  .item.locked .lock-badge { display: block; }
   #guideV, #guideH { stroke: var(--guide); pointer-events: none; }
   .pt-marker { pointer-events: none; }
   .pt-marker circle { fill: var(--point); }
@@ -220,7 +248,6 @@
   .msg.warn { border-left-color: var(--modified); }
   .msg .close { float: right; cursor: pointer; color: var(--text-dim); margin-left: 8px; pointer-events: all; }
   .msg ul { margin: 4px 0 0 16px; max-height: 160px; overflow-y: auto; }
-  .msg .details-toggle { color: var(--accent); cursor: pointer; pointer-events: all; margin-left: 6px; }
 
   /* ============ 帮助浮层 ============ */
   #helpOverlay {
@@ -271,23 +298,39 @@
   <button id="btnReset" disabled title="恢复到导入时的状态（可撤销）">重置</button>
   <span class="sep"></span>
   <button id="btnExport" class="primary" disabled title="导出全部页面（含未修改页）">导出 CSV</button>
+  <button id="btnBlueprint" disabled title="选择 16:9 图片作为本页蓝图底图（也可拖图片到页面或 Ctrl+V 粘贴截图）">蓝图</button>
+  <input type="file" id="bpInput" accept="image/*" hidden>
   <span id="changeLabel"></span>
   <span style="flex:1"></span>
-  <button id="btnCorners" class="on" disabled title="在画布上显示选中组件四个角的坐标">显示角坐标</button>
   <button id="btnHelp" title="快捷键与用法">?</button>
   <button id="btnFit" disabled>适应窗口</button>
   <span id="zoomLabel">100%</span>
 </header>
 
+<div id="draftBanner">
+  <span id="draftBannerText"></span>
+  <span style="flex:1"></span>
+  <button id="btnDraftRestore">恢复</button>
+  <button id="btnDraftDiscard">丢弃</button>
+</div>
+
 <div id="main">
   <aside id="sidebar">
     <div class="side-section-title"><span>坐标（Enter/F2 聚焦）</span></div>
     <div id="inputPanel">
+      <div id="selInfo">未选中组件</div>
       <div class="grid4">
         <label>X <input id="inX" type="text" disabled></label>
         <label>Y <input id="inY" type="text" disabled></label>
         <label>宽 <input id="inW" type="text" disabled></label>
         <label>高 <input id="inH" type="text" disabled></label>
+      </div>
+      <div id="zRow">
+        <button id="btnZBottom" disabled data-tip="置底（Ctrl+[）">置底</button>
+        <button id="btnZDown" disabled data-tip="下移一层（[）">下移</button>
+        <button id="btnZUp" disabled data-tip="上移一层（]）">上移</button>
+        <button id="btnZTop" disabled data-tip="置顶（Ctrl+]）">置顶</button>
+        <span class="z-val" id="zVal">Z:—</span>
       </div>
       <div id="vertexPanel">
         <div class="vp-row"><span>左上</span><b id="vpTL">—</b></div>
@@ -295,11 +338,25 @@
         <div class="vp-row"><span>左下</span><b id="vpBL">—</b></div>
         <div class="vp-row"><span>右下</span><b id="vpBR">—</b></div>
         <div class="vp-row"><span>中心</span><b id="vpC">—</b></div>
-        <label class="show-corners"><input type="checkbox" id="chkCorners" checked> 在画布上显示角坐标</label>
       </div>
     </div>
     <div class="side-section-title"><span>组件列表</span><span id="listCount"></span></div>
+    <div id="searchBox">
+      <input id="searchInput" type="text" placeholder="搜索 Title / Type / Id（空格分词）" disabled>
+      <button id="searchClear" class="mini-btn" title="清空搜索">×</button>
+    </div>
     <div id="compListWrap"><div id="compList"></div></div>
+    <div class="side-section-title">
+      <span>蓝图底图（每页独立）</span>
+    </div>
+    <div id="blueprintPanel">
+      <div class="bp-row">
+        <label><input type="checkbox" id="bpVisible" disabled> 显示</label>
+        <input type="range" id="bpOpacity" min="10" max="100" value="40" disabled title="透明度">
+        <button id="bpRemove" class="mini-btn" disabled>移除</button>
+      </div>
+      <div class="bp-row">工具栏「蓝图」选图 / 拖图片进页面 / Ctrl+V 粘贴截图（需 16:9）。</div>
+    </div>
     <div class="side-section-title">
       <span>已保存坐标点</span>
       <span>
@@ -317,13 +374,6 @@
     <div class="hud" id="hudSelection"></div>
     <div class="hud" id="hudDrag"></div>
     <div class="hud" id="hudMouse"></div>
-    <div class="hud" id="hudZoom">100%</div>
-    <div id="cornerLabels">
-      <div class="corner-label" id="clTL"></div>
-      <div class="corner-label" id="clTR"></div>
-      <div class="corner-label" id="clBL"></div>
-      <div class="corner-label" id="clBR"></div>
-    </div>
     <div class="gap-label" id="gapX"></div>
     <div class="gap-label" id="gapY"></div>
     <div id="hoverTip"></div>
@@ -335,9 +385,10 @@
   <span id="statusFile">未导入文件</span>
   <span id="statusPage">—</span>
   <span id="statusSel">未选中组件</span>
+  <span id="statusLock">已锁定 0 / 0</span>
 </footer>
 
-<div id="dropOverlay">松开以导入 CSV 文件</div>
+<div id="dropOverlay">松开以导入 CSV / 蓝图图片</div>
 <div id="toast"></div>
 
 <div id="helpOverlay">
@@ -351,6 +402,9 @@
   <div><kbd>Enter</kbd>/<kbd>F2</kbd> 聚焦 X 输入框；<kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> 在 X→Y→宽→高 间切换</div>
   <div><kbd>输入框内 ↑/↓</kbd> ±1；<kbd>Shift+↑/↓</kbd> ±10；<kbd>Enter</kbd> 应用；<kbd>Esc</kbd> 放弃并返回画布</div>
   <div><kbd>右键单击画布</kbd> 保存坐标点（不弹菜单）</div>
+  <div><kbd>]</kbd> 上移一层；<kbd>[</kbd> 下移一层；<kbd>Ctrl+]</kbd> 置顶；<kbd>Ctrl+[</kbd> 置底</div>
+  <div><kbd>L</kbd> 锁定/解锁选中组件（锁定后画布点击穿透到下层）</div>
+  <div><kbd>Ctrl+V</kbd> 粘贴剪贴板截图为本页蓝图底图（需 16:9）</div>
   <div><kbd>Ctrl+Z</kbd> 撤销；<kbd>Ctrl+Y</kbd>/<kbd>Ctrl+Shift+Z</kbd> 重做</div>
 </div>
 
@@ -370,8 +424,13 @@
 
   var CANVAS_W = 1280;
   var CANVAS_H = 720;
+  // Sprint 3：必需列固定；Title / Z 可选（列顺序以输入表头为准，导出同构）
   var HEADER = ['Page', 'Id', 'Type', 'X', 'Y', 'Width', 'Height'];
+  var REQUIRED_COLS = ['Page', 'Id', 'Type', 'X', 'Y', 'Width', 'Height'];
   var NUM_FIELDS = { X: 'x', Y: 'y', Width: 'w', Height: 'h' };
+  var NUM_COLS = ['X', 'Y', 'Width', 'Height'];
+  var DRAFT_VERSION = 1;
+  var DRAFT_KEY = 'pbi-layout-grid-draft';
 
   /** 解析一行 CSV（支持引号字段、字段内引号转义 ""、字段内逗号）。 */
   function parseCsvLine(line) {
@@ -394,8 +453,8 @@
   function isIntLike(n) { return Math.abs(n - Math.round(n)) < 1e-9; }
 
   /**
-   * 解析 CSV 文本为数据模型。
-   * 返回 { eol, header, pages:[{name, items:[]}], items:[...], errors:[...], roundNotes:[...] }
+   * 解析 CSV 文本为数据模型（Sprint 3：列顺序以输入表头为准，Title/Z 可选）。
+   * 返回 { eol, header, hasTitle, hasZ, pages, items, errors, roundNotes }
    * 错误行不导入但不阻断其他行；错误信息含"第几行 / 哪个 Id / 哪个字段"。
    */
   function parseCSV(text) {
@@ -415,36 +474,52 @@
       if (rawLines[li].trim() !== '') { firstIdx = li; break; }
     }
     if (firstIdx < 0) {
-      return { eol: eol, header: HEADER.slice(), pages: [], items: [], errors: [{ line: 0, id: '-', field: '-', msg: '文件为空' }], roundNotes: [] };
+      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: [{ line: 0, id: '-', field: '-', msg: '文件为空' }], roundNotes: [] };
     }
 
-    // 表头校验（表头单元格允许首尾空白）
+    // 表头校验（放宽）：必需列 Page,Id,Type,X,Y,Width,Height 齐全即可；Title、Z 可选；
+    // 列顺序以输入为准（导出同构）。重复列名取首次出现的位置。
     var headerFields = parseCsvLine(rawLines[firstIdx]).map(function (s) { return s.trim(); });
-    if (headerFields.join(',') !== HEADER.join(',')) {
-      errors.push({ line: firstIdx + 1, id: '-', field: '-', msg: '表头应为 Page,Id,Type,X,Y,Width,Height，实际为：' + headerFields.join(',') });
-      return { eol: eol, header: HEADER.slice(), pages: [], items: [], errors: errors, roundNotes: roundNotes };
+    var colIdx = Object.create(null);
+    headerFields.forEach(function (h, i) { if (colIdx[h] === undefined) colIdx[h] = i; });
+    var missing = REQUIRED_COLS.filter(function (h) { return colIdx[h] === undefined; });
+    if (missing.length) {
+      errors.push({ line: firstIdx + 1, id: '-', field: '-', msg: '表头缺少必需列：' + missing.join(',') + '，实际为：' + headerFields.join(',') });
+      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: errors, roundNotes: roundNotes };
     }
+    var hasTitle = colIdx.Title !== undefined, hasZ = colIdx.Z !== undefined;
 
     for (var i = firstIdx + 1; i < rawLines.length; i++) {
       var lineNo = i + 1; // 1 起始，含表头
       var line = rawLines[i];
       if (line.trim() === '') continue; // 空行跳过
       var f = parseCsvLine(line);
-      if (f.length !== 7) {
-        errors.push({ line: lineNo, id: f[1] || '-', field: '-', msg: '字段数为 ' + f.length + '，应为 7' });
+      if (f.length !== headerFields.length) {
+        errors.push({ line: lineNo, id: (f[colIdx.Id] != null ? f[colIdx.Id] : '-') || '-', field: '-', msg: '字段数为 ' + f.length + '，应为 ' + headerFields.length });
         continue;
       }
-      // Page/Id/Type 原样保留，不 trim
-      var page = f[0], id = f[1], type = f[2];
+      // Page/Id/Type/Title 原样保留，不 trim；Title 空字段可能不带引号（解析后即为 ''）
+      var page = f[colIdx.Page], id = f[colIdx.Id], type = f[colIdx.Type];
+      var title = hasTitle ? f[colIdx.Title] : '';
       var nums = {}, bad = null, fracFields = [];
-      for (var k = 3; k < 7; k++) {
-        var name = HEADER[k];
-        var t = f[k].trim();
+      for (var k = 0; k < 4; k++) {
+        var name = NUM_COLS[k];
+        var t = f[colIdx[name]].trim();
         var n = Number(t);
-        if (t === '' || !Number.isFinite(n)) { bad = { field: name, msg: '不是数字 "' + f[k] + '"' }; break; }
+        if (t === '' || !Number.isFinite(n)) { bad = { field: name, msg: '不是数字 "' + f[colIdx[name]] + '"' }; break; }
         if (n < 0) { bad = { field: name, msg: '负数 ' + n }; break; }
         if (!isIntLike(n)) fracFields.push(name);
         nums[NUM_FIELDS[name]] = n;
+      }
+      // Z：整数、可空（空则按文件行序当层次）；非整数报错
+      var z = null;
+      if (!bad && hasZ) {
+        var zt = f[colIdx.Z].trim();
+        if (zt !== '') {
+          var zn = Number(zt);
+          if (!Number.isFinite(zn) || !isIntLike(zn)) bad = { field: 'Z', msg: '不是整数 "' + f[colIdx.Z] + '"' };
+          else z = Math.round(zn);
+        }
       }
       if (!bad && (nums.w <= 0 || nums.h <= 0)) bad = { field: nums.w <= 0 ? 'Width' : 'Height', msg: '必须大于 0' };
       if (!bad && (nums.x + nums.w > CANVAS_W || nums.y + nums.h > CANVAS_H)) {
@@ -455,10 +530,11 @@
         continue;
       }
       var item = {
-        page: page, id: id, type: type,
+        page: page, id: id, type: type, title: title,
         x: Math.round(nums.x), y: Math.round(nums.y),
         w: Math.round(nums.w), h: Math.round(nums.h),
-        orig: null // 导入后由应用层设置（重置基准，完整矩形 {x,y,w,h}）
+        z: z, row: items.length, // row：文件行序，Z 重复时作层次平局打破依据
+        orig: null, origZ: null  // 导入后由应用层设置（重置基准）
       };
       if (fracFields.length) {
         roundNotes.push({ line: lineNo, id: id, fields: fracFields });
@@ -471,20 +547,28 @@
       pageMap[page].items.push(item);
       items.push(item);
     }
-    return { eol: eol, header: HEADER.slice(), pages: pages, items: items, errors: errors, roundNotes: roundNotes };
+    return { eol: eol, header: headerFields.slice(), hasTitle: hasTitle, hasZ: hasZ, pages: pages, items: items, errors: errors, roundNotes: roundNotes };
   }
 
   /**
    * 序列化为 CSV（不含 BOM，由调用方决定加不加）。
-   * 列、列顺序、行顺序、Page 原文均与输入一致，仅 X/Y/Width/Height 取值可能不同。
-   * 所有字段一律加引号（与样例文件风格一致），字段内引号转义为 ""。
+   * 列、列顺序、行顺序、Page/Id/Type/Title 原文均与输入一致，
+   * 仅 X/Y/Width/Height/Z 取值可能不同。所有字段一律加引号（空值写成 ""），
+   * 字段内引号转义为 ""。输入没有的列不会凭空新增。
    */
   function serializeCSV(model) {
     var esc = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+    var colIdx = Object.create(null);
+    model.header.forEach(function (h, i) { if (colIdx[h] === undefined) colIdx[h] = i; });
     var lines = [model.header.map(esc).join(',')];
     for (var i = 0; i < model.items.length; i++) {
       var it = model.items[i];
-      lines.push([it.page, it.id, it.type, it.x, it.y, it.w, it.h].map(esc).join(','));
+      var f = new Array(model.header.length);
+      f[colIdx.Page] = it.page; f[colIdx.Id] = it.id; f[colIdx.Type] = it.type;
+      f[colIdx.X] = it.x; f[colIdx.Y] = it.y; f[colIdx.Width] = it.w; f[colIdx.Height] = it.h;
+      if (colIdx.Title !== undefined) f[colIdx.Title] = it.title;
+      if (colIdx.Z !== undefined) f[colIdx.Z] = it.z == null ? '' : it.z;
+      lines.push(f.map(esc).join(','));
     }
     return lines.join(model.eol) + model.eol;
   }
@@ -683,6 +767,89 @@
   /** Shift 直线移动的主方向判定：|dx| >= |dy| 锁定水平，否则垂直（平局取水平） */
   function dominantAxis(dx, dy) { return Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v'; }
 
+  // ==========================================================================
+  // Sprint 3 纯逻辑：Z 层次重分配 / 搜索匹配 / 草稿序列化 / 16:9 判定
+  // ==========================================================================
+
+  /**
+   * Z 层次重分配（纯逻辑，不含 DOM/状态写入）。
+   * pageItems：本页组件数组（均含 z 数值与 row 文件行序）；id：选中组件；action：
+   * 'top' | 'bottom' | 'up' | 'down'（up/down 以"最上层在最后"的序列为方向）。
+   * 算法：按 (z 升序, row 升序) 排序得当前序列 -> 移动选中项 ->
+   * 把【原来已有的 Z 值集合按升序】重新分配给新序列。
+   * 效果：不产生负数/巨大新值；只有被移动范围内的组件 Z 会变化；Z 重复由 row 打破平局。
+   * 返回 { order:[新序列，顶层在最后], changes:[{item,from,to}] }；组件不在页内返回 null。
+   */
+  function computeZReorder(pageItems, id, action) {
+    var seq = pageItems.slice().sort(function (a, b) { return (a.z - b.z) || (a.row - b.row); });
+    var i = -1;
+    for (var k = 0; k < seq.length; k++) { if (seq[k].id === id) { i = k; break; } }
+    if (i < 0) return null;
+    var j = i;
+    if (action === 'top') j = seq.length - 1;
+    else if (action === 'bottom') j = 0;
+    else if (action === 'up') j = Math.min(i + 1, seq.length - 1);
+    else if (action === 'down') j = Math.max(i - 1, 0);
+    if (j === i) return { order: seq, changes: [] };
+    var it = seq.splice(i, 1)[0];
+    seq.splice(j, 0, it);
+    var zvals = seq.map(function (s) { return s.z; }).sort(function (a, b) { return a - b; });
+    var changes = [];
+    for (var m = 0; m < seq.length; m++) {
+      if (seq[m].z !== zvals[m]) changes.push({ item: seq[m], from: seq[m].z, to: zvals[m] });
+    }
+    return { order: seq, changes: changes };
+  }
+
+  /**
+   * 列表搜索匹配（纯逻辑）：按 Title / Type / Id 子串过滤，不区分大小写，
+   * 空格分词取交集。空查询恒匹配。
+   */
+  function matchSearch(query, title, type, id) {
+    var q = String(query || '').toLowerCase().trim();
+    if (!q) return true;
+    var hay = (String(title || '') + ' ' + String(type || '') + ' ' + String(id || '')).toLowerCase();
+    var toks = q.split(/\s+/);
+    for (var i = 0; i < toks.length; i++) {
+      if (hay.indexOf(toks[i]) < 0) return false;
+    }
+    return true;
+  }
+
+  /**
+   * 草稿序列化/恢复（纯逻辑）。草稿结构（v=DRAFT_VERSION）：
+   * { v, fileName, csvText, savedAt(ISO), pageIndex, points(pageName->[{x,y,name}]),
+   *   lockedIds:[id], items:{id:{x,y,w,h,z}} }
+   * parseDraft 对损坏/版本不符/结构非法一律返回 null（调用方安全丢弃）。
+   */
+  function serializeDraft(d) { return JSON.stringify(d); }
+  function parseDraft(s) {
+    var d;
+    try { d = JSON.parse(s); } catch (e) { return null; }
+    if (!d || typeof d !== 'object') return null;
+    if (d.v !== DRAFT_VERSION) return null;
+    if (typeof d.fileName !== 'string' || typeof d.csvText !== 'string' || typeof d.savedAt !== 'string') return null;
+    if (!Number.isInteger(d.pageIndex) || d.pageIndex < 0) return null;
+    if (!d.items || typeof d.items !== 'object' || Array.isArray(d.items)) return null;
+    for (var k in d.items) {
+      var r = d.items[k];
+      if (!r || typeof r !== 'object') return null;
+      if (![r.x, r.y, r.w, r.h].every(function (n) { return Number.isFinite(n); })) return null;
+      if (r.z !== null && !Number.isFinite(r.z)) return null;
+    }
+    if (!Array.isArray(d.lockedIds)) return null;
+    if (!d.points || typeof d.points !== 'object' || Array.isArray(d.points)) return null;
+    return d;
+  }
+
+  /** 蓝图 16:9 判定：宽高比在 16:9 ±1% 容差内。 */
+  function is169(w, h) {
+    if (!(w > 0) || !(h > 0)) return false;
+    var t = 16 / 9;
+    // epsilon 吸收边界浮点误差（如 16*1.01 在 JS 中偏差 1e-17 级）
+    return Math.abs(w / h - t) / t <= 0.01 + 1e-12;
+  }
+
   var PbiLogic = {
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, HEADER: HEADER, GRID: 10,
     parseCSV: parseCSV, serializeCSV: serializeCSV, createCommandStack: createCommandStack,
@@ -691,7 +858,10 @@
     snapResizeEdge: snapResizeEdge, computeResize: computeResize,
     validateRectInput: validateRectInput,
     createMergeableRectCommand: createMergeableRectCommand,
-    dominantAxis: dominantAxis
+    dominantAxis: dominantAxis,
+    computeZReorder: computeZReorder, matchSearch: matchSearch,
+    serializeDraft: serializeDraft, parseDraft: parseDraft,
+    is169: is169, DRAFT_VERSION: DRAFT_VERSION, DRAFT_KEY: DRAFT_KEY
   };
   global.PbiLogic = PbiLogic;
   if (typeof module !== 'undefined' && module.exports) module.exports = PbiLogic;
@@ -718,8 +888,9 @@
 
   // ---------- 状态（数据模型层） ----------
   var state = {
-    model: null,        // 解析后的模型（pages/items/eol/errors/roundNotes）
+    model: null,        // 解析后的模型（pages/items/eol/errors/roundNotes/header/hasTitle/hasZ）
     fileName: '',
+    rawCsvText: '',     // 原始 CSV 文本（草稿恢复用）
     pageIndex: 0,
     selectedId: null,
     snapGrid: true,
@@ -727,10 +898,14 @@
     zoom: 1,
     pan: { x: 0, y: 0 },
     spaceHeld: false,
-    showCorners: true,
+    filterQuery: '',    // 列表搜索词（只影响列表显示）
+    locked: Object.create(null),   // id -> true；不写 CSV、不进撤销栈
+    blueprints: Object.create(null), // pageName(raw) -> {dataUrl, visible, opacity}；每页独立，只存内存/不进草稿
     points: Object.create(null) // pageName(raw) -> [{x,y,name}]，按页独立，不进撤销栈/CSV
   };
   var itemEls = Object.create(null); // id -> svg g 元素（当前页）
+  // 同位置连续点击循环选层：{x, y, t, key, idx}（画布坐标）
+  var lastPick = null;
 
   // 历史：全局一条命令栈，跨页面共享（见 PbiLogic.createCommandStack 注释）
   var history = L.createCommandStack(500);
@@ -780,7 +955,10 @@
   // 位置与尺寸统一为完整矩形 {x,y,w,h}（Sprint 2 前提：改宽高）。
   // ==========================================================================
   function applyRect(item, r) { item.x = r.x; item.y = r.y; item.w = r.w; item.h = r.h; }
-  function isModified(it) { return !L.rectEq(it, it.orig); }
+  /** "已修改"判定：位置/尺寸（完整矩形）+ Z（有 Z 列时）任一变化即视为已修改 */
+  function isModified(it) {
+    return !L.rectEq(it, it.orig) || (state.model.hasZ && it.z !== it.origZ);
+  }
   function modifiedCount() {
     if (!state.model) return 0;
     var n = 0;
@@ -812,12 +990,31 @@
     };
   }
 
-  /** 重置命令：恢复全部改动项到导入基准，undo 恢复改动后状态 */
+  /** 重置命令：恢复全部改动项到导入基准（矩形 + Z），undo 恢复改动后状态 */
   function makeResetCommand(changes) {
     return {
       label: '重置',
-      do: function () { for (var i = 0; i < changes.length; i++) applyRect(changes[i].item, changes[i].from); },
-      undo: function () { for (var i = 0; i < changes.length; i++) applyRect(changes[i].item, changes[i].to); }
+      do: function () {
+        for (var i = 0; i < changes.length; i++) {
+          applyRect(changes[i].item, changes[i].from);
+          changes[i].item.z = changes[i].fromZ;
+        }
+      },
+      undo: function () {
+        for (var i = 0; i < changes.length; i++) {
+          applyRect(changes[i].item, changes[i].to);
+          changes[i].item.z = changes[i].toZ;
+        }
+      }
+    };
+  }
+
+  /** 层次（Z）命令：一次层次操作内多个组件的 Z 变化合并为一条撤销命令 */
+  function makeZCommand(changes) {
+    return {
+      label: '层次调整',
+      do: function () { for (var i = 0; i < changes.length; i++) changes[i].item.z = changes[i].to; },
+      undo: function () { for (var i = 0; i < changes.length; i++) changes[i].item.z = changes[i].from; }
     };
   }
 
@@ -851,11 +1048,19 @@
     return e;
   }
 
-  /** 构建当前页的 world 内容（背景 + 网格 + 引导线 + 点标记 + 组件）。缩放/平移只改 world 的 transform。 */
+  /** 有效层次：有 Z 列用 Z（空值回退文件行序），无 Z 列用文件行序（= 层次） */
+  function effZ(it) { return (state.model.hasZ && it.z != null) ? it.z : it.row; }
+  /** 本页组件按渲染顺序（有效 Z 升序，Z 相同按文件行序）：先画的在下、后画的盖上 */
+  function pageRenderOrder(page) {
+    return page.items.slice().sort(function (a, b) { return (effZ(a) - effZ(b)) || (a.row - b.row); });
+  }
+
+  /** 构建当前页的 world 内容（背景 + 网格 + 蓝图 + 引导线 + 点标记 + 组件）。缩放/平移只改 world 的 transform。 */
   function renderPage() {
     world.textContent = '';
     itemEls = Object.create(null);
     if (!state.model) { applyTransform(); return; }
+    var page = state.model.pages[state.pageIndex];
 
     var bg = el('rect', { x: 0, y: 0, width: CW, height: CH, fill: '#ffffff' }, world);
     bg.addEventListener('pointerdown', onBlankPointerDown);
@@ -872,6 +1077,17 @@
     el('line', { x1: 0.5, y1: 0, x2: 0.5, y2: 100, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
     el('line', { x1: 0, y1: 0.5, x2: 100, y2: 0.5, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
     el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'url(#grid10)' }, world);
+    // 蓝图底图：垫在网格之上、组件之下，拉伸 1280×720，不拦截鼠标事件
+    var bp = state.blueprints[page.name];
+    if (bp && bp.visible) {
+      var img = el('image', {
+        x: 0, y: 0, width: CW, height: CH,
+        preserveAspectRatio: 'none', opacity: bp.opacity,
+        style: 'pointer-events:none'
+      }, world);
+      img.setAttribute('href', bp.dataUrl);
+      img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', bp.dataUrl);
+    }
     el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'none', stroke: '#8a93a3', 'stroke-width': 2 }, world);
 
     // 引导线（贯穿画布）与拖拽原位置虚线轮廓：共享元素，世界坐标
@@ -881,12 +1097,12 @@
     // 已保存坐标点标记层
     el('g', { id: 'pointsGroup' }, world);
 
-    var page = state.model.pages[state.pageIndex];
-    for (var i = 0; i < page.items.length; i++) buildItem(page.items[i]);
+    var order = pageRenderOrder(page);
+    for (var i = 0; i < order.length; i++) buildItem(order[i]);
     applyTransform();
     updateSelectionUI();
     renderPoints();
-    $('listCount').textContent = page.items.length + ' 个';
+    updateListCount();
     $('statusPage').textContent = '当前页：' + JSON.stringify(page.name) + '（' + (state.pageIndex + 1) + '/' + state.model.pages.length + '）';
   }
 
@@ -908,7 +1124,8 @@
     var defs = el('defs', {}, g);
     el('clipPath', { id: clipId }, defs).appendChild(el('rect', { x: 0, y: 0, width: item.w, height: item.h }));
     var labelG = el('g', { 'clip-path': 'url(#' + clipId + ')' }, g);
-    el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = item.type;
+    // 标签：优先 Title（只读、原样透传），无 Title 回退 Type；Id 前 6 位为次要小字
+    el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = item.title || item.type;
     if (item.w >= 74 && item.h >= 26) {
       el('text', { 'class': 'label label-id', x: 3, y: 24 }, labelG).textContent = '#' + item.id.slice(0, 6);
     }
@@ -926,10 +1143,13 @@
     el('rect', { 'class': 'mod-badge', x: item.w - 16, y: 0, width: 16, height: 14, fill: '#e8862e' }, g);
     var badgeText = el('text', { 'class': 'mod-badge', x: item.w - 11.5, y: 11, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', style: 'pointer-events:none' }, g);
     badgeText.textContent = '改';
+    // 锁定小锁标记（锁定组件淡化显示，画布点击穿透到下层）
+    el('text', { 'class': 'lock-badge', x: 3, y: 11, 'font-size': 10, style: 'pointer-events:none' }, g).textContent = '🔒';
 
     g.addEventListener('pointerdown', function (e) { onItemPointerDown(e, item); });
     positionItem(g, item);
     if (isModified(item)) g.classList.add('modified');
+    if (state.locked[item.id]) g.classList.add('locked');
     itemEls[item.id] = g;
   }
 
@@ -965,12 +1185,9 @@
 
   function applyTransform() {
     world.setAttribute('transform', 'translate(' + state.pan.x + ',' + state.pan.y + ') scale(' + state.zoom + ')');
-    var pct = Math.round(state.zoom * 100) + '%';
-    $('zoomLabel').textContent = pct;
-    $('hudZoom').textContent = pct;
+    $('zoomLabel').textContent = Math.round(state.zoom * 100) + '%'; // 缩放百分比唯一显示处
     var sel = state.selectedId ? itemEls[state.selectedId] : null;
     if (sel) layoutHandles(sel, findItem(state.selectedId));
-    updateCornerLabels();
   }
 
   /** 适应窗口 */
@@ -1009,56 +1226,56 @@
   }
   function hideGuides() { updateGuides(null, null, { x: 0, y: 0, w: 0, h: 0 }); }
 
-  /** 选中组件四角坐标标签（屏幕固定字号；位置在角外侧，越界时夹紧到画布内，不遮挡手柄） */
-  function updateCornerLabels() {
-    var item = state.selectedId ? findItem(state.selectedId) : null;
-    var show = state.showCorners && item && state.model;
-    var c0 = worldToScreen(0, 0), c1 = worldToScreen(CW, CH);
-    var cfg = [
-      ['clTL', item ? item.x : 0, item ? item.y : 0, '(x,y)', -1, -1, 'translate(-100%,-100%)'],
-      ['clTR', item ? item.x + item.w : 0, item ? item.y : 0, '(x+w,y)', 1, -1, 'translate(0,-100%)'],
-      ['clBL', item ? item.x : 0, item ? item.y + item.h : 0, '(x,y+h)', -1, 1, 'translate(-100%,0)'],
-      ['clBR', item ? item.x + item.w : 0, item ? item.y + item.h : 0, '(x+w,y+h)', 1, 1, 'none']
-    ];
-    for (var i = 0; i < cfg.length; i++) {
-      var div = $(cfg[i][0]);
-      if (!show) { div.style.display = 'none'; continue; }
-      var label = i === 0 ? '(' + item.x + ', ' + item.y + ')'
-        : i === 1 ? '(' + (item.x + item.w) + ', ' + item.y + ')'
-        : i === 2 ? '(' + item.x + ', ' + (item.y + item.h) + ')'
-        : '(' + (item.x + item.w) + ', ' + (item.y + item.h) + ')';
-      var s = worldToScreen(cfg[i][1], cfg[i][2]);
-      var x = s.x + cfg[i][4] * 5, y = s.y + cfg[i][5] * 5;
-      x = Math.min(Math.max(x, c0.x + 2), c1.x - 72);
-      y = Math.min(Math.max(y, c0.y + 2), c1.y - 14);
-      div.textContent = label;
-      div.style.transform = cfg[i][6];
-      div.style.left = x + 'px'; div.style.top = y + 'px';
-      div.style.display = 'block';
-    }
-  }
-
   // ==========================================================================
   // 组件列表 / 选中（与画布联动）
   // ==========================================================================
+  /** 列表显示顺序：按层次从上到下（最上层在最前；同层按文件行序倒序，与渲染叠放一致） */
+  function pageListOrder(page) {
+    return pageRenderOrder(page).reverse();
+  }
+
   function renderList() {
     var list = $('compList');
     list.textContent = '';
     if (!state.model) { $('listCount').textContent = ''; return; }
     var page = state.model.pages[state.pageIndex];
-    for (var i = 0; i < page.items.length; i++) {
+    var order = pageListOrder(page);
+    for (var i = 0; i < order.length; i++) {
       (function (item) {
+        if (!L.matchSearch(state.filterQuery, item.title, item.type, item.id)) return;
+        var locked = !!state.locked[item.id];
         var row = document.createElement('div');
-        row.className = 'row' + (isModified(item) ? ' modified' : '') + (item.id === state.selectedId ? ' selected' : '');
+        row.className = 'row' + (isModified(item) ? ' modified' : '') + (item.id === state.selectedId ? ' selected' : '') + (locked ? ' locked' : '');
+        var lock = document.createElement('span');
+        lock.className = 'lock' + (locked ? ' on' : '');
+        lock.textContent = locked ? '🔒' : '🔓';
+        lock.title = locked ? '解锁（选中后按 L）' : '锁定（选中后按 L）';
+        lock.addEventListener('click', function (e) { e.stopPropagation(); toggleLock(item.id); });
         var dot = document.createElement('span'); dot.className = 'mod-dot';
-        var type = document.createElement('span'); type.className = 'type'; type.textContent = item.type;
+        // 主显示 Title（无则回退 Type）；Id 前 6 位为次要小字
+        var name = document.createElement('span');
+        name.className = 'title';
+        name.textContent = item.title || item.type;
         var id = document.createElement('span'); id.className = 'id'; id.textContent = '#' + item.id.slice(0, 6);
-        row.appendChild(dot); row.appendChild(type); row.appendChild(id);
+        row.appendChild(lock); row.appendChild(dot); row.appendChild(name); row.appendChild(id);
         row.title = item.id;
         row.addEventListener('click', function () { selectItem(item.id); });
         list.appendChild(row);
-      })(page.items[i]);
+      })(order[i]);
     }
+  }
+
+  /** 列表计数：搜索时显示"匹配 n / 总数" */
+  function updateListCount() {
+    if (!state.model) { $('listCount').textContent = ''; return; }
+    var page = state.model.pages[state.pageIndex];
+    if (!state.filterQuery.trim()) { $('listCount').textContent = page.items.length + ' 个'; return; }
+    var n = 0;
+    for (var i = 0; i < page.items.length; i++) {
+      var it = page.items[i];
+      if (L.matchSearch(state.filterQuery, it.title, it.type, it.id)) n++;
+    }
+    $('listCount').textContent = '匹配 ' + n + ' / ' + page.items.length;
   }
 
   function findItem(id) {
@@ -1075,11 +1292,12 @@
     if (selRow) selRow.scrollIntoView({ block: 'nearest' });
   }
 
-  /** 输入框同步：仅在"用户未正在编辑"时覆盖，避免打字被刷新打断 */
+  /** 输入框同步：仅在"用户未正在编辑"时覆盖，避免打字被刷新打断；锁定组件输入框置灰 */
   function syncInputs(item) {
     var ids = ['inX', 'inY', 'inW', 'inH'];
-    for (var i = 0; i < ids.length; i++) $(ids[i]).disabled = !item;
-    if (!item) return;
+    var locked = item ? !!state.locked[item.id] : false;
+    for (var i = 0; i < ids.length; i++) $(ids[i]).disabled = !item || locked;
+    if (!item || locked) return;
     var active = document.activeElement;
     var editing = active && ids.indexOf(active.id) >= 0 && active.dataset.dirty === '1';
     if (editing) return;
@@ -1101,28 +1319,48 @@
       }
     }
     var item = state.selectedId ? findItem(state.selectedId) : null;
+    var locked = item ? !!state.locked[item.id] : false;
     var hud = $('hudSelection');
+    // 无 Z 列时层次按钮禁用并说明原因
+    var noZ = state.model ? !state.model.hasZ : true;
+    var zTitle = noZ ? '输入缺少 Z 列，无法调整层次' : '';
+    ['btnZTop', 'btnZUp', 'btnZDown', 'btnZBottom'].forEach(function (id) {
+      var b = $(id);
+      b.disabled = !item || locked || noZ;
+      b.title = locked ? '组件已锁定，先解锁（L）' : (zTitle || b.getAttribute('data-tip'));
+    });
     if (item) {
+      var shortName = item.title || item.type;
       hud.style.display = '';
-      hud.textContent = '选中 ' + item.type + ' #' + item.id.slice(0, 6) + '（拖手柄改宽高）';
-      $('statusSel').textContent = '选中：' + item.type + ' #' + item.id.slice(0, 6);
+      hud.textContent = '选中 ' + shortName + ' #' + item.id.slice(0, 6) + (locked ? '（已锁定）' : '') + '（拖手柄改宽高）';
+      $('statusSel').textContent = '选中：' + shortName + ' #' + item.id.slice(0, 6) + (locked ? '（已锁定）' : '');
+      // 坐标窗口顶部：Type / Title / 完整 Id
+      $('selInfo').innerHTML = '';
+      var b1 = document.createElement('b'); b1.textContent = item.type;
+      var sep1 = document.createTextNode(' / ');
+      var b2 = document.createElement('b'); b2.textContent = item.title || '（无标题）';
+      var sep2 = document.createElement('div');
+      sep2.textContent = 'Id: ' + item.id;
+      $('selInfo').appendChild(b1); $('selInfo').appendChild(sep1); $('selInfo').appendChild(b2);
+      $('selInfo').appendChild(sep2);
       $('vpTL').textContent = '(' + item.x + ', ' + item.y + ')';
       $('vpTR').textContent = '(' + (item.x + item.w) + ', ' + item.y + ')';
       $('vpBL').textContent = '(' + item.x + ', ' + (item.y + item.h) + ')';
       $('vpBR').textContent = '(' + (item.x + item.w) + ', ' + (item.y + item.h) + ')';
       $('vpC').textContent = '(' + (item.x + item.w / 2) + ', ' + (item.y + item.h / 2) + ')';
+      $('zVal').textContent = state.model.hasZ ? ('Z:' + (item.z == null ? '—' : item.z)) : 'Z:无列';
     } else {
       hud.style.display = 'none';
       $('statusSel').textContent = '未选中组件';
+      $('selInfo').textContent = '未选中组件';
       ['vpTL', 'vpTR', 'vpBL', 'vpBR', 'vpC'].forEach(function (id) { $(id).textContent = '—'; });
+      $('zVal').textContent = 'Z:—';
     }
     syncInputs(item);
     var rows = $('compList').children;
     for (var r = 0; r < rows.length; r++) {
       rows[r].classList.toggle('selected', rows[r].title === state.selectedId);
     }
-    $('btnCorners').classList.toggle('on', state.showCorners);
-    updateCornerLabels();
   }
 
   /** 数据变化后的统一刷新（命令执行/撤销/重做/重置/键盘微调后调用） */
@@ -1134,10 +1372,12 @@
       positionItem(g, it);
       updateItemGeometry(g, it);
       g.classList.toggle('modified', isModified(it));
+      g.classList.toggle('locked', !!state.locked[it.id]);
     }
     renderList();
     updateSelectionUI();
     updateToolbar();
+    scheduleDraftSave();
   }
 
   function updateToolbar() {
@@ -1145,12 +1385,20 @@
     $('btnRedo').disabled = !history.canRedo();
     var n = modifiedCount();
     $('changeLabel').textContent = state.model ? (n > 0 ? '已修改 ' + n + ' 个组件' : '') : '';
+    // 状态栏锁定计数
+    if (state.model) {
+      var lockedN = 0;
+      for (var i = 0; i < state.model.items.length; i++) if (state.locked[state.model.items[i].id]) lockedN++;
+      $('statusLock').textContent = '已锁定 ' + lockedN + ' / ' + state.model.items.length;
+    } else {
+      $('statusLock').textContent = '已锁定 0 / 0';
+    }
   }
 
   // ==========================================================================
   // 消息 / 提示
   // ==========================================================================
-  function showMsg(kind, title, lines, opts) {
+  function showMsg(kind, title, lines) {
     var box = $('messages');
     var div = document.createElement('div');
     div.className = 'msg ' + kind;
@@ -1165,18 +1413,6 @@
         var li = document.createElement('li');
         li.textContent = lines[i];
         ul.appendChild(li);
-      }
-      if (opts && opts.collapsible) {
-        ul.style.display = 'none';
-        var toggle = document.createElement('span');
-        toggle.className = 'details-toggle';
-        toggle.textContent = '展开 ' + lines.length + ' 条详情 ▾';
-        toggle.addEventListener('click', function () {
-          var open = ul.style.display !== 'none';
-          ul.style.display = open ? 'none' : '';
-          toggle.textContent = (open ? '展开 ' : '收起 ') + lines.length + ' 条详情 ' + (open ? '▾' : '▴');
-        });
-        div.appendChild(toggle);
       }
       div.appendChild(ul);
     }
@@ -1256,7 +1492,7 @@
         idxSpan.className = 'idx'; idxSpan.textContent = (idx + 1) + '.';
         var name = document.createElement('input');
         name.className = 'name'; name.value = p.name; name.title = '点击可改名';
-        name.addEventListener('change', function () { p.name = name.value.trim() || p.name; name.value = p.name; });
+        name.addEventListener('change', function () { p.name = name.value.trim() || p.name; name.value = p.name; scheduleDraftSave(); });
         name.addEventListener('keydown', function (e) { e.stopPropagation(); });
         var xy = document.createElement('span');
         xy.className = 'xy'; xy.textContent = '(' + p.x + ', ' + p.y + ')';
@@ -1268,6 +1504,7 @@
         btnDel.addEventListener('click', function () {
           pts.splice(idx, 1);
           renderPoints();
+          scheduleDraftSave();
         });
         row.appendChild(idxSpan); row.appendChild(name); row.appendChild(xy);
         row.appendChild(btnCopy); row.appendChild(btnDel);
@@ -1301,8 +1538,272 @@
   }
 
   // ==========================================================================
+  // Sprint 3：锁定 / 层次调整 / 列表搜索 / 蓝图底图 / 草稿
+  // ==========================================================================
+  /** 锁定状态不写 CSV、不进撤销栈；锁定组件画布穿透（CSS pointer-events:none），仅列表可选 */
+  function toggleLock(id) {
+    if (!findItem(id)) return;
+    if (state.locked[id]) delete state.locked[id];
+    else state.locked[id] = true;
+    renderPage();
+    renderList();
+    updateToolbar();
+    scheduleDraftSave();
+  }
+
+  /** 层次调整：一次操作 = 一条撤销命令；Z 重分配走 PbiLogic.computeZReorder 纯逻辑 */
+  function zReorder(action) {
+    var it = state.selectedId ? findItem(state.selectedId) : null;
+    if (!it || !state.model.hasZ) return;
+    if (state.locked[it.id]) { showToast('组件已锁定，先解锁（L）'); return; }
+    var page = state.model.pages[state.pageIndex];
+    var res = L.computeZReorder(page.items, it.id, action);
+    if (!res || !res.changes.length) return; // 已在顶/底等：无变化不产生命令
+    history.push(makeZCommand(res.changes));
+    renderPage();  // 渲染顺序变化需重建 DOM
+    renderList();
+    updateToolbar();
+    scheduleDraftSave();
+  }
+
+  /** 同位置连续点击循环选层：命中点下所有未锁定组件按叠放自顶向下，连续点击依次选中下一层 */
+  function pickAtPoint(c, hitId) {
+    var page = state.model.pages[state.pageIndex];
+    var stack = [];
+    for (var i = 0; i < page.items.length; i++) {
+      var it = page.items[i];
+      if (state.locked[it.id]) continue;
+      var hw = Math.max(it.w, HIT_MIN), hh = Math.max(it.h, HIT_MIN);
+      var hx = it.x + (it.w - hw) / 2, hy = it.y + (it.h - hh) / 2;
+      if (c.x >= hx && c.x <= hx + hw && c.y >= hy && c.y <= hy + hh) stack.push(it);
+    }
+    stack.sort(function (a, b) { return (effZ(a) - effZ(b)) || (a.row - b.row); });
+    stack.reverse(); // 顶层在前
+    if (!stack.length) return;
+    var now = Date.now();
+    var key = stack.map(function (s) { return s.id; }).join('|');
+    var idx = 0;
+    if (lastPick && lastPick.key === key && now - lastPick.t < 900 &&
+        Math.abs(c.x - lastPick.x) <= 4 && Math.abs(c.y - lastPick.y) <= 4) {
+      idx = (lastPick.idx + 1) % stack.length;
+    }
+    lastPick = { x: c.x, y: c.y, t: now, key: key, idx: idx };
+    selectItem(stack[idx].id);
+    if (stack.length > 1) showToast('第 ' + (idx + 1) + '/' + stack.length + ' 层');
+    return stack[idx];
+  }
+
+  /** 搜索过滤：只影响列表显示；Esc 清空 */
+  function setFilter(q) {
+    state.filterQuery = q;
+    renderList();
+    updateListCount();
+  }
+
+  // ---- 蓝图底图（每页独立一张，只存内存，不进草稿/CSV） ----
+  function updateBlueprintUI() {
+    var bp = state.model ? state.blueprints[pageName()] : null;
+    var has = !!bp;
+    $('bpVisible').disabled = !has;
+    $('bpOpacity').disabled = !has;
+    $('bpRemove').disabled = !has;
+    if (has) {
+      $('bpVisible').checked = bp.visible;
+      $('bpOpacity').value = Math.round(bp.opacity * 100);
+    }
+  }
+
+  function setBlueprintOpacity(v) {
+    var bp = state.model ? state.blueprints[pageName()] : null;
+    if (!bp) return;
+    bp.opacity = Math.min(Math.max(v, 0.1), 1);
+    renderPage();
+  }
+
+  function removeBlueprint() {
+    if (!state.model) return;
+    delete state.blueprints[pageName()];
+    renderPage();
+    updateBlueprintUI();
+  }
+
+  /** 接收图片文件为本页蓝图：仅接受 16:9（±1%），不符给出比例提示 */
+  function acceptBlueprint(file) {
+    if (!state.model) return;
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      var w = img.naturalWidth, h = img.naturalHeight;
+      URL.revokeObjectURL(url);
+      if (!L.is169(w, h)) {
+        // 比例提示约成最简整数比（如 4:3）
+        var g = gcd(w, h);
+        showToast('需要 16:9 图片，当前比例 ' + (w / g) + ':' + (h / g));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        state.blueprints[pageName()] = { dataUrl: reader.result, visible: true, opacity: 0.4 };
+        renderPage();
+        updateBlueprintUI();
+        showToast('已设置本页蓝图（默认 40% 透明）');
+      };
+      reader.readAsDataURL(file);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); showToast('无法读取该图片文件'); };
+    img.src = url;
+  }
+  function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+
+  // ---- 自动保存草稿（防抖 500ms；localStorage 不可用/超限静默降级并轻提示一次） ----
+  var draftTimer = null, draftWarned = false, pendingDraft = null;
+
+  function scheduleDraftSave() {
+    if (!state.model) return;
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, 500);
+  }
+
+  function saveDraft() {
+    if (!state.model) return;
+    try {
+      var items = Object.create(null);
+      for (var i = 0; i < state.model.items.length; i++) {
+        var it = state.model.items[i];
+        items[it.id] = { x: it.x, y: it.y, w: it.w, h: it.h, z: it.z };
+      }
+      var d = {
+        v: L.DRAFT_VERSION,
+        fileName: state.fileName,
+        csvText: state.rawCsvText,
+        savedAt: new Date().toISOString(),
+        pageIndex: state.pageIndex,
+        points: state.points,
+        lockedIds: Object.keys(state.locked),
+        items: items
+      };
+      localStorage.setItem(L.DRAFT_KEY, L.serializeDraft(d));
+    } catch (e) {
+      if (!draftWarned) {
+        draftWarned = true;
+        showToast('本地草稿不可用（存储受限），本次会话仍可正常编辑');
+      }
+    }
+  }
+
+  /** 启动时发现草稿：显示横幅，恢复/丢弃由用户决定 */
+  function checkDraft() {
+    try {
+      var raw = localStorage.getItem(L.DRAFT_KEY);
+      if (!raw) return;
+      var d = L.parseDraft(raw);
+      if (!d) { localStorage.removeItem(L.DRAFT_KEY); return; } // 损坏/版本不符：安全丢弃
+      pendingDraft = d;
+      var t;
+      try { t = new Date(d.savedAt).toLocaleString('zh-CN', { hour12: false }); } catch (e) { t = d.savedAt; }
+      $('draftBannerText').textContent = '发现上次未完成的工作：' + d.fileName + '（' + t + '）。蓝图底图不进入草稿，恢复后需重新放入。';
+      document.body.classList.add('has-draft');
+    } catch (e) { /* localStorage 不可用：静默 */ }
+  }
+
+  function hideDraftBanner() {
+    pendingDraft = null;
+    document.body.classList.remove('has-draft');
+  }
+
+  function discardDraft() {
+    try { localStorage.removeItem(L.DRAFT_KEY); } catch (e) { /* 忽略 */ }
+    hideDraftBanner();
+  }
+
+  /** 恢复草稿：重新解析原始 CSV（"已修改"以导入原值为基准），撤销栈清空 */
+  function restoreDraft() {
+    var d = pendingDraft;
+    if (!d) return;
+    var model = L.parseCSV(d.csvText);
+    if (!model.items.length) {
+      showMsg('error', '草稿恢复失败：原始数据无法解析', model.errors.map(fmtError));
+      return;
+    }
+    loadModel(model, d.fileName, d.csvText, {
+      pageIndex: Math.min(d.pageIndex, model.pages.length - 1),
+      points: d.points,
+      lockedIds: d.lockedIds,
+      overrides: d.items
+    });
+    hideDraftBanner();
+    showMsg('', '已恢复草稿：' + d.fileName + '（撤销栈为空；"已修改"以导入原值为基准）');
+  }
+
+  // ==========================================================================
   // 导入 / 导出
   // ==========================================================================
+  /**
+   * 装载模型（导入文件与草稿恢复共用）。
+   * opts: { pageIndex, points, lockedIds, overrides }（仅草稿恢复传入）。
+   * 覆盖顺序：解析 -> 设 orig 基准 -> 应用草稿覆盖值 -> 重建页面状态。
+   */
+  function loadModel(model, fileName, rawText, opts) {
+    opts = opts || {};
+    // 重置基准：完整矩形（位置 + 尺寸）+ Z（有 Z 列时）
+    for (var i = 0; i < model.items.length; i++) {
+      var it = model.items[i];
+      it.orig = { x: it.x, y: it.y, w: it.w, h: it.h };
+      it.origZ = it.z;
+    }
+    // 草稿覆盖：位置/尺寸/Z（"已修改"以导入原值为基准，故标记保持正确）
+    if (opts.overrides) {
+      for (var j = 0; j < model.items.length; j++) {
+        var ov = opts.overrides[model.items[j].id];
+        if (!ov) continue;
+        var m = model.items[j];
+        m.x = ov.x; m.y = ov.y; m.w = ov.w; m.h = ov.h;
+        if (ov.z !== null && m.z !== null) m.z = ov.z;
+      }
+    }
+    state.model = model;
+    state.fileName = fileName;
+    state.rawCsvText = rawText;
+    state.pageIndex = opts.pageIndex || 0;
+    state.selectedId = null;
+    state.points = opts.points || Object.create(null);
+    state.locked = Object.create(null);
+    if (opts.lockedIds) {
+      for (var k = 0; k < opts.lockedIds.length; k++) {
+        if (findItem(opts.lockedIds[k])) state.locked[opts.lockedIds[k]] = true;
+      }
+    }
+    state.blueprints = Object.create(null); // 蓝图只存内存，恢复/导入后需重新放入
+    state.filterQuery = '';
+    $('searchInput').value = '';
+    history.clear();
+    lastPick = null;
+
+    var sel = $('pageSelect');
+    sel.textContent = '';
+    model.pages.forEach(function (pg, idx) {
+      var opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = pg.name + '（' + pg.items.length + '）';
+      sel.appendChild(opt);
+    });
+    sel.disabled = model.pages.length === 0;
+    sel.value = String(state.pageIndex);
+
+    $('fileLabel').textContent = fileName;
+    $('fileLabel').title = fileName;
+    $('statusFile').textContent = '已导入：' + fileName + '（共 ' + model.items.length + ' 个组件，' + model.pages.length + ' 页）';
+    ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit', 'btnBlueprint'].forEach(function (id) { $(id).disabled = false; });
+    $('searchInput').disabled = false;
+
+    renderPage();
+    renderList();
+    updateToolbar();
+    updateBlueprintUI();
+    requestAnimationFrame(fitToWindow);
+    scheduleDraftSave(); // 导入新文件即覆盖草稿
+  }
+
   function handleFile(file) {
     file.text().then(function (text) {
       var model = L.parseCSV(text);
@@ -1310,47 +1811,14 @@
         showMsg('error', '导入失败：未能解析任何组件行', model.errors.map(fmtError));
         return;
       }
-      // 重置基准：完整矩形（位置 + 尺寸）
-      for (var i = 0; i < model.items.length; i++) {
-        model.items[i].orig = { x: model.items[i].x, y: model.items[i].y, w: model.items[i].w, h: model.items[i].h };
-      }
-      state.model = model;
-      state.fileName = file.name;
-      state.pageIndex = 0;
-      state.selectedId = null;
-      state.points = Object.create(null);
-      history.clear();
+      loadModel(model, file.name, text);
 
-      var sel = $('pageSelect');
-      sel.textContent = '';
-      model.pages.forEach(function (pg, idx) {
-        var opt = document.createElement('option');
-        opt.value = idx;
-        opt.textContent = pg.name + '（' + pg.items.length + '）';
-        sel.appendChild(opt);
-      });
-      sel.disabled = model.pages.length === 0;
-      sel.value = '0';
-
-      $('fileLabel').textContent = file.name;
-      $('fileLabel').title = file.name;
-      $('statusFile').textContent = '已导入：' + file.name + '（共 ' + model.items.length + ' 个组件，' + model.pages.length + ' 页）';
-      ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit', 'btnCorners'].forEach(function (id) { $(id).disabled = false; });
-
-      renderPage();
-      renderList();
-      updateToolbar();
-      requestAnimationFrame(fitToWindow);
-
-      // 导入提示：小数取整合并为一条可折叠汇总；错误行仍逐条列出
+      // 导入提示：小数取整只保留一条汇总；错误行仍逐条列出
       if (model.errors.length) {
         showMsg('warn', '导入完成：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页；' + model.errors.length + ' 行错误未导入', model.errors.map(fmtError));
       }
       if (model.roundNotes.length) {
-        showMsg('warn', model.roundNotes.length + ' 行坐标含小数，已四舍五入',
-          model.roundNotes.map(function (r) {
-            return '第 ' + r.line + ' 行（Id: ' + r.id + '）字段 ' + r.fields.join('/') + ' 含小数，已四舍五入';
-          }), { collapsible: true });
+        showMsg('warn', model.roundNotes.length + ' 行含小数，已四舍五入');
       }
       if (!model.errors.length && !model.roundNotes.length) {
         showMsg('', '导入成功：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页');
@@ -1392,13 +1860,16 @@
   function onItemPointerDown(e, item) {
     if (e.button !== 0 || state.spaceHeld) return; // 空格/中键 = 平移
     e.stopPropagation();
-    selectItem(item.id);
+    if (state.locked[item.id]) return; // 锁定组件画布穿透（CSS 已不拦截，这里兜底）
+    // 同位置连续点击：在被盖住的多层组件间循环选中下一层；拖拽作用于选中项
+    var picked = pickAtPoint(screenToCanvas(e.clientX, e.clientY), item.id);
+    var target = picked || item;
     drag = {
-      mode: 'move', item: item, pointerId: e.pointerId,
+      mode: 'move', item: target, pointerId: e.pointerId,
       startCanvas: screenToCanvas(e.clientX, e.clientY),
-      origRect: L.copyRect(item), curRect: L.copyRect(item),
+      origRect: L.copyRect(target), curRect: L.copyRect(target),
       startScreen: { x: e.clientX, y: e.clientY },
-      moved: false, lock: null, cand: buildCandidates(item.id)
+      moved: false, lock: null, cand: buildCandidates(target.id)
     };
     capturePointer(e);
   }
@@ -1406,6 +1877,7 @@
   function onHandlePointerDown(e, item, handle) {
     if (e.button !== 0 || state.spaceHeld) return;
     e.stopPropagation();
+    if (state.locked[item.id]) return; // 锁定组件不可缩放
     selectItem(item.id);
     drag = {
       mode: 'resize', handle: handle, item: item, pointerId: e.pointerId,
@@ -1493,7 +1965,9 @@
         var it = findItem(gEl.getAttribute('data-id'));
         if (it) {
           var wr = workspace.getBoundingClientRect();
-          tip.textContent = it.type + '  #' + it.id.slice(0, 6) + '  x:' + it.x + ' y:' + it.y + ' w:' + it.w + ' h:' + it.h;
+          tip.textContent = (it.title ? it.title + '  ' : '') + it.type + '  #' + it.id.slice(0, 6) +
+            '  x:' + it.x + ' y:' + it.y + ' w:' + it.w + ' h:' + it.h +
+            (state.locked[it.id] ? '  🔒已锁定' : '');
           tip.style.left = (e.clientX - wr.left + 14) + 'px';
           tip.style.top = (e.clientY - wr.top + 12) + 'px';
           tip.style.display = 'block';
@@ -1605,6 +2079,7 @@
     var pts = pagePoints();
     pts.push({ x: x, y: y, name: '点 ' + (pts.length + 1) });
     renderPoints();
+    scheduleDraftSave();
   });
 
   // ==========================================================================
@@ -1614,7 +2089,7 @@
 
   function applyInputs() {
     var it = state.selectedId ? findItem(state.selectedId) : null;
-    if (!it) return;
+    if (!it || state.locked[it.id]) return; // 锁定组件不可编辑
     var v = L.validateRectInput({
       x: $('inX').value, y: $('inY').value, w: $('inW').value, h: $('inH').value
     }, CW, CH, MIN_SIZE);
@@ -1686,20 +2161,45 @@
     showToast('组件吸附：' + (state.snapComp ? '开' : '关'));
   });
 
-  $('btnCorners').addEventListener('click', function () {
-    state.showCorners = !state.showCorners;
-    this.classList.toggle('on', state.showCorners);
-    $('chkCorners').checked = state.showCorners;
-    updateCornerLabels();
-  });
-  $('chkCorners').addEventListener('change', function () {
-    state.showCorners = this.checked;
-    $('btnCorners').classList.toggle('on', state.showCorners);
-    updateCornerLabels();
-  });
   $('btnHelp').addEventListener('click', function () {
     document.body.classList.toggle('help-open');
   });
+
+  // Sprint 3：层次调整按钮
+  $('btnZTop').addEventListener('click', function () { zReorder('top'); });
+  $('btnZUp').addEventListener('click', function () { zReorder('up'); });
+  $('btnZDown').addEventListener('click', function () { zReorder('down'); });
+  $('btnZBottom').addEventListener('click', function () { zReorder('bottom'); });
+
+  // Sprint 3：列表搜索
+  $('searchInput').addEventListener('input', function () { setFilter(this.value); });
+  $('searchInput').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 输入框内快捷键不触发全局
+    if (e.key === 'Escape') { this.value = ''; setFilter(''); }
+  });
+  $('searchClear').addEventListener('click', function () {
+    $('searchInput').value = '';
+    setFilter('');
+  });
+
+  // Sprint 3：蓝图底图
+  $('btnBlueprint').addEventListener('click', function () { $('bpInput').click(); });
+  $('bpInput').addEventListener('change', function (e) {
+    if (e.target.files[0]) acceptBlueprint(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('bpVisible').addEventListener('change', function () {
+    var bp = state.model ? state.blueprints[pageName()] : null;
+    if (!bp) return;
+    bp.visible = this.checked;
+    renderPage();
+  });
+  $('bpOpacity').addEventListener('input', function () { setBlueprintOpacity(this.value / 100); });
+  $('bpRemove').addEventListener('click', removeBlueprint);
+
+  // Sprint 3：草稿横幅
+  $('btnDraftRestore').addEventListener('click', restoreDraft);
+  $('btnDraftDiscard').addEventListener('click', discardDraft);
 
   $('btnCopyPoints').addEventListener('click', function () {
     var pts = state.model ? (state.points[pageName()] || []) : [];
@@ -1717,7 +2217,7 @@
     var changes = [];
     for (var i = 0; i < state.model.items.length; i++) {
       var it = state.model.items[i];
-      if (isModified(it)) changes.push({ item: it, from: L.copyRect(it.orig), to: L.copyRect(it) });
+      if (isModified(it)) changes.push({ item: it, from: L.copyRect(it.orig), to: L.copyRect(it), fromZ: it.origZ, toZ: it.z });
     }
     if (!changes.length) { showToast('当前没有任何改动'); return; }
     execute(makeResetCommand(changes));
@@ -1726,14 +2226,17 @@
   $('pageSelect').addEventListener('change', function (e) {
     state.pageIndex = Number(e.target.value);
     state.selectedId = null;
+    lastPick = null;
     renderPage();
     renderList();
+    updateBlueprintUI();
+    scheduleDraftSave(); // 当前页变化进草稿
   });
 
   /** 方向键微调：1px / Shift 10px，不受吸附影响；连续按键（间隔 <500ms）合并为一条撤销命令 */
   function nudgeSelected(dx, dy) {
     var it = state.selectedId ? findItem(state.selectedId) : null;
-    if (!it) return;
+    if (!it || state.locked[it.id]) return; // 锁定组件不可微调
     var to = clampRect2({ x: it.x + dx, y: it.y + dy, w: it.w, h: it.h });
     if (L.rectEq(to, it)) return;
     var now = Date.now();
@@ -1774,6 +2277,16 @@
       if (tag !== 'BUTTON') { $('inX').focus(); e.preventDefault(); }
       return;
     }
+    // Sprint 3：层次调整（] 上移，[ 下移，Ctrl+] 置顶，Ctrl+[ 置底）与锁定（L）
+    if (e.key === ']' || e.key === '[') {
+      e.preventDefault();
+      zReorder(e.ctrlKey || e.metaKey ? (e.key === ']' ? 'top' : 'bottom') : (e.key === ']' ? 'up' : 'down'));
+      return;
+    }
+    if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (state.selectedId) { toggleLock(state.selectedId); }
+      return;
+    }
     // 方向键微调
     var step = e.shiftKey ? 10 : 1;
     if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeSelected(-step, 0); }
@@ -1795,10 +2308,28 @@
     dragCounter = 0;
     document.body.classList.remove('dragging-file');
     var f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) handleFile(f);
+    if (!f) return;
+    // 与拖 CSV 区分：按文件类型，图片 -> 本页蓝图，其余按 CSV 导入
+    if (f.type && f.type.indexOf('image/') === 0) acceptBlueprint(f);
+    else handleFile(f);
+  });
+
+  // Ctrl+V 粘贴剪贴板截图为本页蓝图（需 16:9）
+  window.addEventListener('paste', function (e) {
+    if (!state.model) return;
+    var items = e.clipboardData && e.clipboardData.files;
+    if (!items || !items.length) return;
+    var f = items[0];
+    if (f.type && f.type.indexOf('image/') === 0) {
+      e.preventDefault();
+      acceptBlueprint(f);
+    }
   });
 
   window.addEventListener('resize', function () { applyTransform(); });
+
+  // 启动：发现上次未完成的工作则显示草稿横幅
+  checkDraft();
 })();
 </script>
 </body>
