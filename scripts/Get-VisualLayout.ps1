@@ -59,21 +59,32 @@ $rows = foreach ($pageDir in Get-ChildItem $pagesDir -Directory) {
             $parentId = $parent.parentGroupName
         }
 
+        # 標題存成字串常值（前後包單引號，內部單引號會寫成兩個）；沒設標題就退回第一個綁定欄位名
+        $title = @($v.visual.visualContainerObjects.title.properties.text.expr.Literal.Value)[0]
+        if ($title) { $title = $title.Trim("'") -replace "''", "'" }
+        else {
+            # 退回第一個綁定欄位：欄位有改名就用改後的名字，沒有就用原始欄位名
+            $pr = @($v.visual.query.queryState.PSObject.Properties.Value.projections)[0]
+            $title = @($pr.displayName, $pr.nativeQueryRef, $pr.queryRef | Where-Object { $_ })[0]
+        }
+
         [pscustomobject]@{
             Page   = $pageName
             Id     = $v.name                     # 視覺的唯一 ID，要改檔案時靠它定位
             Type   = $v.visual.visualType
+            Title  = $title
             # 一律無條件進位成整數，省得看一堆小數
             X      = [math]::Ceiling($absX)
             Y      = [math]::Ceiling($absY)
             Width  = [math]::Ceiling($v.position.width)
             Height = [math]::Ceiling($v.position.height)
+            Z      = $v.position.z               # 疊放層級，數字大的蓋在上面
         }
     }
 }
 
-# 排序成由上到下、由左到右，跟肉眼掃版面的順序一致
-$rows = $rows | Sort-Object Page, Y, X
+# 照 Z 由小到大排，跟報表裡真正的疊放順序一致（後面的蓋在前面的上面）
+$rows = $rows | Sort-Object Page, Z
 
 # 輸出到 .Report 旁邊的 visual-layout 資料夾，不弄亂專案根目錄
 $outDir = Join-Path (Split-Path $reportPath -Parent) 'visual-layout'
