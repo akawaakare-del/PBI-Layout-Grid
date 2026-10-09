@@ -197,6 +197,191 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
   ok(lines[2].includes('"P2"'), 'Page 值透传');
 }
 
+// ============================================================================
+// 10. Sprint 2 基础：copyRect / rectEq
+// ============================================================================
+{
+  const r = { x: 1, y: 2, w: 3, h: 4 };
+  const c = L.copyRect(r);
+  ok(c !== r && c.x === 1 && c.y === 2 && c.w === 3 && c.h === 4, 'copyRect：返回新对象且值一致');
+  c.x = 99;
+  eq(r.x, 1, 'copyRect：修改副本不影响原对象');
+  ok(L.rectEq({ x: 1, y: 2, w: 3, h: 4 }, { x: 1, y: 2, w: 3, h: 4 }), 'rectEq：相同矩形为 true');
+  ok(!L.rectEq({ x: 1, y: 2, w: 3, h: 4 }, { x: 1, y: 2, w: 3, h: 5 }), 'rectEq：h 不同为 false');
+  ok(!L.rectEq({ x: 1, y: 2, w: 3, h: 4 }, { x: 1, y: 2, w: 3, h: 4.5 }), 'rectEq：严格相等（4 vs 4.5 为 false）');
+}
+
+// ============================================================================
+// 11. 移动吸附：阈值边界、最小距离、阈值随 zoom 折算
+// ============================================================================
+{
+  // 左线=0、中心=50、右线=100 的矩形（w=100），候选线含 640
+  const rect = { x: 0, y: 0, w: 100, h: 40 };
+  const candX = [0, 640, 1280];
+  const candY = [0, 360, 720];
+  // zoom=1：threshold = 10/1 = 10（画布像素）
+  let res = L.computeSnapMove({ x: 635, y: 300, w: 100, h: 40 }, candX, candY, 10);
+  ok(res.x && res.x.target === 640 && res.x.line === 0, 'zoom=1：左线距 640 为 5 ≤ 10，命中线 640（左线）');
+  eq(res.x.delta, 5, 'zoom=1：delta=+5 贴齐');
+  // zoom=4：threshold = 10/4 = 2.5（画布像素），5 > 2.5 不命中
+  res = L.computeSnapMove({ x: 635, y: 300, w: 100, h: 40 }, candX, candY, 2.5);
+  ok(res.x === null, 'zoom=4：同样的 5 画布像素 > 2.5 阈值，不命中（手感按屏幕像素一致）');
+  // zoom=0.25：threshold = 10/0.25 = 40，命中
+  res = L.computeSnapMove({ x: 635, y: 300, w: 100, h: 40 }, candX, candY, 40);
+  ok(res.x && res.x.target === 640, 'zoom=25%：阈值放大到 40，命中');
+  // 阈值边界：距离恰好 = threshold 命中；threshold+1 不命中
+  res = L.computeSnapMove({ x: 630, y: 300, w: 100, h: 40 }, candX, candY, 10);
+  ok(res.x && res.x.dist === 10, '距离恰好等于阈值时命中');
+  res = L.computeSnapMove({ x: 629, y: 300, w: 100, h: 40 }, candX, candY, 10);
+  ok(res.x === null, '距离超过阈值 1px 不命中');
+  // 多条候选取最近：左线 644 距 645 为 1、距 640 为 4，取 645（640 也会被右线 744 比较但不更近）
+  res = L.computeSnapMove({ x: 644, y: 300, w: 100, h: 40 }, [640, 645], candY, 10);
+  ok(res.x && res.x.target === 645 && res.x.dist === 1, '多条候选都在阈值内时取距离最小者');
+}
+
+// ============================================================================
+// 12. 移动吸附：两轴独立（X 命中、Y 不命中）
+// ============================================================================
+{
+  const candX = [0, 640, 1280], candY = [0, 360, 720];
+  // x=637 距 640 为 3（左线）会命中；y=200 距任何 Y 候选都 > 10
+  const res = L.computeSnapMove({ x: 637, y: 200, w: 100, h: 40 }, candX, candY, 10);
+  ok(res.x && res.x.target === 640, '两轴独立：X 轴命中 640');
+  ok(res.y === null, '两轴独立：Y 轴无命中（调用方按网格/1px 处理）');
+  // y=685,h=40：下线 725 距 720 为 5（中心 705 距 720 为 15），命中下线
+  const res2 = L.computeSnapMove({ x: 100, y: 685, w: 100, h: 40 }, candX, candY, 10);
+  ok(res2.y && res2.y.target === 720 && res2.y.line === 2 && res2.y.dist === 5, 'Y 轴下线距 720 为 5，命中（line=2 下线）');
+  ok(res2.x === null, 'Y 命中时 X 不强制命中');
+  // 中心线命中：rect.x+ w/2 = 640 → x = 590
+  const res3 = L.computeSnapMove({ x: 588, y: 100, w: 100, h: 40 }, candX, candY, 10);
+  ok(res3.x && res3.x.line === 1 && res3.x.target === 640, '水平中心线命中（line=1）');
+}
+
+// ============================================================================
+// 13. 移动吸附：阈值 0 / 两种吸附全关时调用方语义（无命中 → 走 1px）
+// ============================================================================
+{
+  const candX = [0, 640, 1280], candY = [0, 360, 720];
+  const res = L.computeSnapMove({ x: 636, y: 356, w: 10, h: 10 }, candX, candY, 0);
+  ok(res.x === null && res.y === null, 'threshold=0：无非零距离命中（双关时由调用方取整到 1px）');
+}
+
+// ============================================================================
+// 14. 缩放计算：网格吸附 / 组件吸附 / 双关 / 最小尺寸 / 画布夹紧
+// ============================================================================
+{
+  const base = { snapGrid: true, snapComp: false, threshold: 10, candX: [0, 640, 1280], candY: [0, 360, 720], minW: 10, minH: 10, canvasW: 1280, canvasH: 720 };
+  // e 手柄 + 网格：右边 205 → 210
+  let r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'e', 5, 0, base);
+  eq(r.rect.w, 110, '缩放：e 手柄网格吸附，右边 205 → 210（w=110）');
+  eq(r.rect.x, 100, '缩放：e 手柄不动 x');
+  // e 手柄 + 组件吸附：右边 635 距 640 为 5 ≤ 10 命中（优先于网格）
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'e', 435, 0, Object.assign({}, base, { snapComp: true }));
+  eq(r.rect.w, 540, '缩放：组件吸附优先，右边贴 640（w=540）');
+  ok(r.hits.e && r.hits.e.target === 640, '缩放：hits.e 记录命中线供引导线');
+  // e 手柄 双关：1px 取整
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'e', 4.4, 0, Object.assign({}, base, { snapGrid: false }));
+  eq(r.rect.w, 104, '缩放：双关时 1px 精度（104.4 → 104）');
+  // e 手柄最小尺寸：拖过头 w < 10 → 夹紧到 10
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'e', -200, 0, base);
+  eq(r.rect.w, 10, '缩放：最小尺寸保护 w=10');
+  // e 手柄画布右缘：右边拖到 2000 → 夹紧 1280
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'e', 2000, 0, base);
+  eq(r.rect.w, 1180, '缩放：不可超出画布右边（w=1180）');
+  // nw 手柄：x/y 动、w/h 反向
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'nw', 10, 5, base);
+  eq(r.rect.x, 110, '缩放：nw 手柄 x 右移');
+  eq(r.rect.y, 110, '缩放：nw 手柄 y 下移');
+  eq(r.rect.w, 90, '缩放：nw 手柄 w 缩小');
+  eq(r.rect.h, 40, '缩放：nw 手柄 h 缩小');
+  // nw 最小尺寸：拖太多 → 夹紧（x 最多右移到 x+w-minW）
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 'nw', 500, 0, base);
+  eq(r.rect.w, 10, '缩放：nw 拖过头夹紧最小宽 10');
+  eq(r.rect.x, 190, '缩放：nw 夹紧后 x=190（右边不动）');
+  // nw 画布左上缘：x 不可 < 0
+  r = L.computeResize({ x: 50, y: 50, w: 100, h: 50 }, 'nw', -100, -100, base);
+  eq(r.rect.x, 0, '缩放：x 不可出画布左缘（夹紧 0）');
+  eq(r.rect.y, 0, '缩放：y 不可出画布上缘（夹紧 0）');
+  eq(r.rect.w, 150, '缩放：夹紧后宽保持右边不变');
+  // s 手柄 + 组件吸附：下边 715 距 720 为 5 命中
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 's', 0, 565, Object.assign({}, base, { snapComp: true }));
+  eq(r.rect.h, 620, '缩放：s 组件吸附，下边贴 720（h=620）');
+  ok(r.hits.s && r.hits.s.target === 720, '缩放：hits.s 记录命中线');
+}
+
+// ============================================================================
+// 15. 输入校验：合法 / 非数字 / 非整数 / 负数 / 尺寸过小 / 越界
+// ============================================================================
+{
+  // 合法（字符串数字可）
+  let v = L.validateRectInput({ x: '10', y: '20', w: '100', h: '50' }, 1280, 720, 10);
+  ok(v.ok && v.rect.x === 10 && v.rect.w === 100, '校验：字符串数字通过并转整数');
+  // 空
+  v = L.validateRectInput({ x: '', y: 20, w: 100, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === 'X' && /不是数字/.test(v.msg), '校验：空值为非数字');
+  // 非数字
+  v = L.validateRectInput({ x: 'abc', y: 20, w: 100, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === 'X' && /不是数字/.test(v.msg), '校验：abc 非数字');
+  // 非整数
+  v = L.validateRectInput({ x: 10.5, y: 20, w: 100, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === 'X' && /整数/.test(v.msg), '校验：10.5 必须是整数');
+  // 负数
+  v = L.validateRectInput({ x: -1, y: 20, w: 100, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === 'X' && /负/.test(v.msg), '校验：负数拒绝');
+  // 尺寸 < 10
+  v = L.validateRectInput({ x: 0, y: 0, w: 9, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === '宽' && /不能小于/.test(v.msg), '校验：宽 9 < 10 拒绝');
+  v = L.validateRectInput({ x: 0, y: 0, w: 10, h: 5 }, 1280, 720, 10);
+  ok(!v.ok && v.field === '高' && /不能小于/.test(v.msg), '校验：高 5 < 10 拒绝');
+  // 越界：x+w > 1280
+  v = L.validateRectInput({ x: 1200, y: 0, w: 100, h: 50 }, 1280, 720, 10);
+  ok(!v.ok && v.field === 'X' && /超出画布/.test(v.msg), '校验：X+宽超出画布');
+  // 边界：恰好贴边通过
+  v = L.validateRectInput({ x: 1180, y: 670, w: 100, h: 50 }, 1280, 720, 10);
+  ok(v.ok, '校验：恰好贴画布右下缘通过');
+}
+
+// ============================================================================
+// 16. 可合并命令：窗口内合并、超窗拒绝、撤销回到序列起点
+// ============================================================================
+{
+  const item = { x: 0, y: 0, w: 100, h: 50 };
+  const apply = (it, r) => { it.x = r.x; it.y = r.y; it.w = r.w; it.h = r.h; };
+  const stack = L.createCommandStack();
+  const cmd = L.createMergeableRectCommand(item, { x: 0, y: 0, w: 100, h: 50 }, { x: 1, y: 0, w: 100, h: 50 }, '方向键', apply, 500);
+  stack.push(cmd);
+  eq(item.x, 1, '合并命令：push 立即应用到本次终点（首击不丢失）');
+  // 模拟按住右箭头：t=100,300,600 连续三次 +1px
+  ok(cmd.tryMerge({ x: 1, y: 0, w: 100, h: 50 }, 100), '合并：窗口内第一次合并成功');
+  ok(cmd.tryMerge({ x: 2, y: 0, w: 100, h: 50 }, 300), '合并：间隔 200ms < 500ms 合并成功');
+  ok(cmd.tryMerge({ x: 3, y: 0, w: 100, h: 50 }, 600), '合并：间隔 300ms < 500ms 合并成功');
+  eq(item.x, 3, '合并：连续移动后位置为 3');
+  // 停顿 600ms 后再移动：应被拒绝（调用方需新建命令）
+  ok(!cmd.tryMerge({ x: 4, y: 0, w: 100, h: 50 }, 1200), '合并：停顿 600ms 超过窗口，拒绝合并');
+  // 撤销一次：回到按键序列起点 0
+  stack.undo();
+  eq(item.x, 0, '合并：一次撤销回到按键序列开始前');
+  stack.redo();
+  eq(item.x, 3, '合并：重做恢复到序列终点 3');
+  // peek 供调用方判断栈顶命令
+  eq(typeof stack.peek, 'function', '命令栈提供 peek()');
+  eq(stack.peek(), cmd, 'peek 返回栈顶命令');
+  stack.undo();
+  eq(stack.peek(), null, '栈空时 peek 返回 null');
+}
+
+// ============================================================================
+// 17. Shift 锁轴：主方向判定（平局取水平）
+// ============================================================================
+{
+  eq(L.dominantAxis(10, 5), 'h', '锁轴：|dx|>|dy| 锁水平');
+  eq(L.dominantAxis(5, 10), 'v', '锁轴：|dy|>|dx| 锁垂直');
+  eq(L.dominantAxis(10, 10), 'h', '锁轴：平局取水平');
+  eq(L.dominantAxis(-10, 3), 'h', '锁轴：负位移同样按绝对值判定');
+  eq(L.dominantAxis(3, -10), 'v', '锁轴：dy 为负锁垂直');
+  eq(L.dominantAxis(0, 0), 'h', '锁轴：零位移取水平');
+}
+
 console.log('----------------------------------------');
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
 process.exit(fail ? 1 : 0);

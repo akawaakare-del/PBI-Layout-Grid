@@ -3,21 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PBI Layout Grid — 布局调整工具（Sprint 1）</title>
+<title>PBI Layout Grid — 布局调整工具（Sprint 2）</title>
 <style>
-  /* ============ 基础与布局 ============ */
+  /* ============ 基础与布局（浅色主题，颜色集中于此便于换肤） ============ */
   :root {
-    --bg: #1e1f24;
-    --panel: #26272e;
-    --panel-2: #2d2f37;
-    --border: #3a3c46;
-    --text: #d8dade;
-    --text-dim: #8b8e99;
-    --accent: #4f8cff;
-    --accent-dim: #2c4a80;
-    --modified: #e8862e;
-    --danger: #e05b5b;
-    --ok: #4caf7d;
+    --bg: #f2f4f8;             /* 整页背景 */
+    --panel: #ffffff;          /* 工作台/工具栏底 */
+    --panel-2: #eef1f6;        /* 次级底（按钮、分区标题） */
+    --border: #d4d9e2;
+    --text: #2b2f36;
+    --text-dim: #6d7480;
+    --accent: #2f6fe4;         /* 选中高亮、主按钮 */
+    --accent-dim: #dce8ff;
+    --modified: #e8862e;       /* 已修改标记 */
+    --danger: #d64545;
+    --ok: #2f9e63;
+    --guide: #ff3d7f;          /* 吸附引导线（醒目、与网格区分） */
+    --point: #7a3df0;          /* 已保存坐标点 */
+    --workspace-bg: #e7eaf0;   /* 工作区外围（画布外） */
+    --shadow: 0 2px 10px rgba(30, 40, 60, .14);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -49,7 +53,7 @@
   }
   button:hover:not(:disabled) { border-color: var(--accent); }
   button:disabled { opacity: .4; cursor: not-allowed; }
-  button.on { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent-dim); border-color: var(--accent); color: #1c3d7a; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .tag-s2 {
     font-size: 10px; color: var(--text-dim); margin-left: 3px;
@@ -63,7 +67,7 @@
   #main { flex: 1; display: flex; min-height: 0; }
 
   #sidebar {
-    width: 250px; min-width: 250px;
+    width: 264px; min-width: 264px;
     background: var(--panel);
     border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
@@ -72,32 +76,68 @@
   .side-section-title {
     padding: 6px 10px; font-size: 12px; color: var(--text-dim);
     background: var(--panel-2); border-bottom: 1px solid var(--border);
-    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
   }
+  /* 坐标输入面板 */
+  #inputPanel { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  #inputPanel .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  #inputPanel label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+  #inputPanel input {
+    width: 100%; padding: 3px 6px; font-size: 12px;
+    font-family: Consolas, monospace;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--text);
+  }
+  #inputPanel input:disabled { background: var(--panel-2); color: var(--text-dim); }
+  #inputPanel input:focus { outline: none; border-color: var(--accent); }
+  /* 顶点/中心坐标小面板 */
+  #vertexPanel { margin-top: 8px; font-size: 11px; color: var(--text-dim); font-family: Consolas, monospace; line-height: 1.7; }
+  #vertexPanel .vp-row { display: flex; justify-content: space-between; }
+  #vertexPanel .vp-row b { color: var(--text); font-weight: 600; }
+  #vertexPanel label.show-corners { display: flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 4px; font-family: inherit; cursor: pointer; }
+
   #compListWrap { flex: 1; overflow-y: auto; min-height: 0; }
   #compList .row {
     padding: 5px 10px; cursor: pointer;
-    border-bottom: 1px solid #30323a;
+    border-bottom: 1px solid var(--panel-2);
     display: flex; align-items: center; gap: 6px;
     white-space: nowrap; overflow: hidden;
   }
   #compList .row:hover { background: var(--panel-2); }
-  #compList .row.selected { background: var(--accent-dim); color: #fff; }
+  #compList .row.selected { background: var(--accent-dim); }
   #compList .row .type { font-weight: 600; }
   #compList .row .id { color: var(--text-dim); font-size: 11px; }
-  #compList .row.selected .id { color: #c5d5f5; }
   #compList .row .mod-dot {
     width: 7px; height: 7px; border-radius: 50%;
     background: var(--modified); flex: none; visibility: hidden;
   }
   #compList .row.modified .mod-dot { visibility: visible; }
-  #pointsWrap { height: 160px; border-top: 1px solid var(--border); overflow-y: auto; }
-  #pointsWrap .placeholder { padding: 16px 10px; color: var(--text-dim); font-size: 12px; line-height: 1.7; }
+
+  /* 已保存坐标点 */
+  #pointsWrap { max-height: 190px; border-top: 1px solid var(--border); overflow-y: auto; }
+  #pointsWrap .placeholder { padding: 14px 10px; color: var(--text-dim); font-size: 12px; line-height: 1.7; }
+  #pointList .pt-row {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 8px; border-bottom: 1px solid var(--panel-2); font-size: 12px;
+  }
+  #pointList .pt-row .idx { color: var(--text-dim); min-width: 14px; }
+  #pointList .pt-row input.name {
+    flex: 1; min-width: 40px; padding: 1px 4px; font-size: 12px;
+    border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--text);
+  }
+  #pointList .pt-row input.name:hover, #pointList .pt-row input.name:focus {
+    border-color: var(--border); background: #fff; outline: none;
+  }
+  #pointList .pt-row .xy { font-family: Consolas, monospace; color: var(--text-dim); white-space: nowrap; }
+  #pointList .pt-row button { padding: 0 5px; font-size: 11px; }
+  #pointList .pt-row.active { background: var(--accent-dim); }
+  .mini-btn { padding: 1px 6px !important; font-size: 11px !important; }
 
   /* ============ 工作区 / 画布 ============ */
   #workspace {
     flex: 1; position: relative; overflow: hidden;
-    background: #16171b;
+    background: var(--workspace-bg);
   }
   #workspace.panning { cursor: grabbing; }
   #workspace.space-held { cursor: grab; }
@@ -106,48 +146,102 @@
   /* HUD：不随画布缩放，保证读数清晰 */
   .hud {
     position: absolute; pointer-events: none;
-    background: rgba(20,21,26,.85); border: 1px solid var(--border);
+    background: rgba(255, 255, 255, .93); border: 1px solid var(--border);
     border-radius: 4px; padding: 4px 8px; font-size: 12px;
     font-family: Consolas, "Courier New", monospace;
-    line-height: 1.6; white-space: nowrap; z-index: 5;
+    line-height: 1.6; white-space: nowrap; z-index: 5; color: var(--text);
+    box-shadow: var(--shadow);
   }
   #hudSelection { top: 10px; left: 10px; display: none; }
   #hudMouse { bottom: 10px; left: 10px; display: none; }
-  #hudDrag { top: 10px; left: 200px; display: none; color: #ffe2b8; }
-  #hudZoom { bottom: 10px; right: 10px; color: var(--text-dim); }
+  #hudDrag { top: 10px; left: 200px; display: none; color: #8a5a12; }
+  #hudZoom { bottom: 10px; right: 10px; color: var(--text-dim); box-shadow: none; }
+
+  /* 角坐标标签：屏幕固定字号，不随缩放变化 */
+  .corner-label {
+    position: absolute; z-index: 4; pointer-events: none;
+    font: 10px Consolas, monospace; white-space: nowrap;
+    background: #fff8e6; border: 1px solid #e8c97a; color: #7a5c14;
+    border-radius: 2px; padding: 0 3px; display: none;
+  }
+  /* 吸附间距标签 */
+  .gap-label {
+    position: absolute; z-index: 4; pointer-events: none;
+    font: 11px Consolas, monospace; white-space: nowrap;
+    background: var(--guide); color: #fff;
+    border-radius: 3px; padding: 1px 5px; display: none;
+  }
+  /* 悬停提示 */
+  #hoverTip {
+    position: absolute; z-index: 6; pointer-events: none; display: none;
+    background: rgba(255,255,255,.96); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font-size: 11px; line-height: 1.6;
+    font-family: Consolas, monospace; color: var(--text); box-shadow: var(--shadow);
+  }
+  /* 轻量提示（输入回退等） */
+  #toast {
+    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    z-index: 60; display: none;
+    background: #32363f; color: #fff; border-radius: 4px;
+    padding: 6px 14px; font-size: 12px; box-shadow: var(--shadow);
+  }
 
   /* SVG 内部元素 */
   .item .body { stroke-width: 1.5; }
   .item.selected .body { stroke: var(--accent) !important; stroke-width: 2; }
   .item .hit { fill: transparent; pointer-events: all; }
-  .item .label { font-size: 10px; fill: #333; pointer-events: none; font-family: inherit; }
-  .item .label-id { fill: #667; }
-  .item .handle { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; } /* S2 才可拖 */
+  .item .label { font-size: 10px; fill: #3d434d; pointer-events: none; font-family: inherit; }
+  .item .label-id { fill: #78808d; }
+  /* 手柄：屏幕像素大小由 JS 按 zoom 折算；命中优先级高于本体（手柄在 DOM 中位于本体之后，SVG 取最上层命中） */
+  .item .handle { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
   .item .mod-badge { display: none; }
   .item.modified .mod-badge { display: block; }
+  #guideV, #guideH { stroke: var(--guide); pointer-events: none; }
+  .pt-marker { pointer-events: none; }
+  .pt-marker circle { fill: var(--point); }
+  .pt-marker line { stroke: var(--point); }
+  .pt-marker.hl circle { fill: #ff3d7f; }
+  .pt-marker.hl line { stroke: #ff3d7f; }
+  .pt-marker.flash { animation: ptflash .18s linear 6 alternate; }
+  @keyframes ptflash { from { opacity: 1; } to { opacity: .1; } }
 
   /* ============ 消息面板 ============ */
   #messages {
     position: absolute; top: 10px; right: 10px; z-index: 20;
-    max-width: 420px; display: flex; flex-direction: column; gap: 6px;
+    max-width: 440px; display: flex; flex-direction: column; gap: 6px;
   }
   .msg {
     background: var(--panel); border: 1px solid var(--border);
     border-left: 3px solid var(--accent);
     border-radius: 4px; padding: 8px 10px; font-size: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    box-shadow: var(--shadow); color: var(--text);
   }
   .msg.error { border-left-color: var(--danger); }
   .msg.warn { border-left-color: var(--modified); }
   .msg .close { float: right; cursor: pointer; color: var(--text-dim); margin-left: 8px; pointer-events: all; }
   .msg ul { margin: 4px 0 0 16px; max-height: 160px; overflow-y: auto; }
+  .msg .details-toggle { color: var(--accent); cursor: pointer; pointer-events: all; margin-left: 6px; }
+
+  /* ============ 帮助浮层 ============ */
+  #helpOverlay {
+    position: fixed; top: 46px; right: 10px; z-index: 40; display: none;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: var(--shadow); padding: 12px 16px; font-size: 12px; line-height: 2;
+    max-width: 360px; color: var(--text);
+  }
+  #helpOverlay h3 { font-size: 13px; margin-bottom: 4px; }
+  #helpOverlay kbd {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px;
+    padding: 0 5px; font-family: Consolas, monospace; font-size: 11px;
+  }
+  body.help-open #helpOverlay { display: block; }
 
   /* ============ 拖放遮罩 ============ */
   #dropOverlay {
     position: fixed; inset: 0; z-index: 50; display: none;
-    background: rgba(20,30,50,.7); border: 3px dashed var(--accent);
+    background: rgba(47, 111, 228, .16); border: 3px dashed var(--accent);
     align-items: center; justify-content: center;
-    font-size: 20px; color: #fff; pointer-events: none;
+    font-size: 20px; color: var(--text); pointer-events: none;
   }
   body.dragging-file #dropOverlay { display: flex; }
 
@@ -169,8 +263,8 @@
   <label style="color:var(--text-dim)">页面</label>
   <select id="pageSelect" disabled></select>
   <span class="sep"></span>
-  <button id="btnSnapGrid" class="on" disabled title="拖动时吸附到 10px 网格">网格吸附</button>
-  <button id="btnSnapComp" disabled title="吸附到其他组件（Sprint 2 实现）">组件吸附<span class="tag-s2">S2</span></button>
+  <button id="btnSnapGrid" class="on" disabled title="拖动/缩放时吸附到 10px 网格">网格吸附</button>
+  <button id="btnSnapComp" disabled title="靠近其他组件边/中心 10 屏幕像素内自动贴齐并出引导线">组件吸附</button>
   <span class="sep"></span>
   <button id="btnUndo" disabled title="Ctrl+Z">撤销</button>
   <button id="btnRedo" disabled title="Ctrl+Y / Ctrl+Shift+Z">重做</button>
@@ -179,18 +273,41 @@
   <button id="btnExport" class="primary" disabled title="导出全部页面（含未修改页）">导出 CSV</button>
   <span id="changeLabel"></span>
   <span style="flex:1"></span>
+  <button id="btnCorners" class="on" disabled title="在画布上显示选中组件四个角的坐标">显示角坐标</button>
+  <button id="btnHelp" title="快捷键与用法">?</button>
   <button id="btnFit" disabled>适应窗口</button>
   <span id="zoomLabel">100%</span>
 </header>
 
 <div id="main">
   <aside id="sidebar">
+    <div class="side-section-title"><span>坐标（Enter/F2 聚焦）</span></div>
+    <div id="inputPanel">
+      <div class="grid4">
+        <label>X <input id="inX" type="text" disabled></label>
+        <label>Y <input id="inY" type="text" disabled></label>
+        <label>宽 <input id="inW" type="text" disabled></label>
+        <label>高 <input id="inH" type="text" disabled></label>
+      </div>
+      <div id="vertexPanel">
+        <div class="vp-row"><span>左上</span><b id="vpTL">—</b></div>
+        <div class="vp-row"><span>右上</span><b id="vpTR">—</b></div>
+        <div class="vp-row"><span>左下</span><b id="vpBL">—</b></div>
+        <div class="vp-row"><span>右下</span><b id="vpBR">—</b></div>
+        <div class="vp-row"><span>中心</span><b id="vpC">—</b></div>
+        <label class="show-corners"><input type="checkbox" id="chkCorners" checked> 在画布上显示角坐标</label>
+      </div>
+    </div>
     <div class="side-section-title"><span>组件列表</span><span id="listCount"></span></div>
     <div id="compListWrap"><div id="compList"></div></div>
-    <div class="side-section-title"><span>已保存坐标点</span><span class="tag-s2">S2</span></div>
-    <div id="pointsWrap">
-      <div class="placeholder">右键保存坐标点将在 Sprint 2 提供。<br>当前迭代此区域仅占位。</div>
+    <div class="side-section-title">
+      <span>已保存坐标点</span>
+      <span>
+        <button id="btnCopyPoints" class="mini-btn" disabled title="复制全部：每行 名称: x, y">复制全部</button>
+        <button id="btnClearPoints" class="mini-btn" disabled title="清空本页已保存点">清空</button>
+      </span>
     </div>
+    <div id="pointsWrap"><div id="pointList"></div></div>
   </aside>
 
   <section id="workspace">
@@ -201,6 +318,15 @@
     <div class="hud" id="hudDrag"></div>
     <div class="hud" id="hudMouse"></div>
     <div class="hud" id="hudZoom">100%</div>
+    <div id="cornerLabels">
+      <div class="corner-label" id="clTL"></div>
+      <div class="corner-label" id="clTR"></div>
+      <div class="corner-label" id="clBL"></div>
+      <div class="corner-label" id="clBR"></div>
+    </div>
+    <div class="gap-label" id="gapX"></div>
+    <div class="gap-label" id="gapY"></div>
+    <div id="hoverTip"></div>
     <div id="messages"></div>
   </section>
 </div>
@@ -212,12 +338,27 @@
 </footer>
 
 <div id="dropOverlay">松开以导入 CSV 文件</div>
+<div id="toast"></div>
+
+<div id="helpOverlay">
+  <h3>快捷键与用法</h3>
+  <div><kbd>滚轮</kbd> 以鼠标为中心缩放（25%~400%）</div>
+  <div><kbd>空白拖动</kbd> / <kbd>空格</kbd>+拖动 / <kbd>中键</kbd> 平移画布</div>
+  <div><kbd>左键拖动</kbd> 移动组件（靠近其他组件边/中心自动吸附出引导线）</div>
+  <div><kbd>拖动中 Shift</kbd> 锁定水平/垂直直线移动，松开恢复</div>
+  <div><kbd>拖 8 个手柄</kbd> 改宽高（同样吸附，最小 10×10）</div>
+  <div><kbd>方向键</kbd> 微调 1px；<kbd>Shift+方向键</kbd> 10px（连续按键合并为一次撤销）</div>
+  <div><kbd>Enter</kbd>/<kbd>F2</kbd> 聚焦 X 输入框；<kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> 在 X→Y→宽→高 间切换</div>
+  <div><kbd>输入框内 ↑/↓</kbd> ±1；<kbd>Shift+↑/↓</kbd> ±10；<kbd>Enter</kbd> 应用；<kbd>Esc</kbd> 放弃并返回画布</div>
+  <div><kbd>右键单击画布</kbd> 保存坐标点（不弹菜单）</div>
+  <div><kbd>Ctrl+Z</kbd> 撤销；<kbd>Ctrl+Y</kbd>/<kbd>Ctrl+Shift+Z</kbd> 重做</div>
+</div>
 
 <script id="pbi-logic">
 // ============================================================================
 // PBILOGIC-BEGIN
-// 纯逻辑块：CSV 解析/序列化 + 命令栈。与 DOM 无关，可在浏览器与 Node 中复用。
-// 浏览器：挂载 globalThis.PbiLogic；Node：module.exports（测试脚本直接复用本块）。
+// 纯逻辑块：CSV 解析/序列化 + 命令栈 + 吸附/缩放/校验/合并/锁轴。与 DOM 无关，
+// 可在浏览器与 Node 中复用。浏览器：挂载 globalThis.PbiLogic；Node：module.exports。
 // 关键约定：
 //  - 画布逻辑尺寸固定 1280×720，原点左上角，坐标一律整数。
 //  - Page 值原样保留（不 trim，含前导空格）；同名 Page 视为同一页。
@@ -317,7 +458,7 @@
         page: page, id: id, type: type,
         x: Math.round(nums.x), y: Math.round(nums.y),
         w: Math.round(nums.w), h: Math.round(nums.h),
-        orig: null // 导入后由应用层设置（重置基准）
+        orig: null // 导入后由应用层设置（重置基准，完整矩形 {x,y,w,h}）
       };
       if (fracFields.length) {
         roundNotes.push({ line: lineNo, id: id, fields: fracFields });
@@ -379,13 +520,178 @@
       canUndo: function () { return idx > 0; },
       canRedo: function () { return idx < stack.length; },
       clear: function () { stack = []; idx = 0; },
+      /** 栈顶（最近一条已执行命令），供"可合并命令"判断；无则 null */
+      peek: function () { return idx > 0 ? stack[idx - 1] : null; },
       get length() { return idx; }
     };
   }
 
+  // ==========================================================================
+  // 矩形 / 吸附 / 缩放 / 输入校验 / 命令合并 / Shift 锁轴（Sprint 2 纯逻辑）
+  // ==========================================================================
+
+  function copyRect(r) { return { x: r.x, y: r.y, w: r.w, h: r.h }; }
+  function rectEq(a, b) { return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h; }
+
+  /**
+   * 移动吸附（单轴）：被拖矩形的 3 条线（左/上=0、中心=1、右/下=2）与候选线逐一比对，
+   * 取 |距离| <= threshold 且最小的一对。threshold 单位为画布像素，
+   * 调用方按 10/zoom 折算，保证各缩放下"10 屏幕像素"手感一致。
+   * 返回 { delta, target, dist, line } 或 null。
+   */
+  function snapAxisMove(lines, cands, threshold) {
+    var best = null;
+    for (var i = 0; i < lines.length; i++) {
+      for (var j = 0; j < cands.length; j++) {
+        var d = cands[j] - lines[i];
+        var ad = Math.abs(d);
+        if (ad <= threshold && (best === null || ad < best.dist)) {
+          best = { delta: d, target: cands[j], dist: ad, line: i };
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * 移动吸附（两轴独立）：rect 的 x/x+w/2/x+w 对 candX，y 同理对 candY。
+   * 返回 { x: hit|null, y: hit|null }；命中轴用 hit.delta 修正，未命中轴由调用方
+   * 按网格吸附/1px 规则处理。
+   */
+  function computeSnapMove(rect, candX, candY, threshold) {
+    var xs = [rect.x, rect.x + rect.w / 2, rect.x + rect.w];
+    var ys = [rect.y, rect.y + rect.h / 2, rect.y + rect.h];
+    return {
+      x: snapAxisMove(xs, candX, threshold),
+      y: snapAxisMove(ys, candY, threshold)
+    };
+  }
+
+  /** 缩放吸附：被拖动的那条边（单个值）对候选线吸附 */
+  function snapResizeEdge(edgeVal, cands, threshold) {
+    var best = null;
+    for (var j = 0; j < cands.length; j++) {
+      var d = cands[j] - edgeVal;
+      var ad = Math.abs(d);
+      if (ad <= threshold && (best === null || ad < best.dist)) {
+        best = { delta: d, target: cands[j], dist: ad };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * 缩放计算（纯逻辑）：handle ∈ nw/n/ne/e/se/s/sw/w。
+   * opts: { snapGrid, snapComp, threshold, candX, candY, minW, minH, canvasW, canvasH }
+   * 规则：被拖动的边优先组件吸附（snapComp 且命中），否则网格吸附（整 10），否则 1px；
+   * 最小尺寸、不可超出画布（夹紧）。返回 { rect, hits }（hits: {w?,e?,n?,s?} 供引导线）。
+   */
+  function computeResize(start, handle, dx, dy, opts) {
+    var minW = opts.minW || 10, minH = opts.minH || 10;
+    var rect = copyRect(start);
+    var hits = {};
+    var edgeVal;
+
+    function resolveEdge(val, cands) {
+      var hit = null;
+      if (opts.snapComp) {
+        hit = snapResizeEdge(val, cands, opts.threshold);
+        if (hit) return { v: hit.target, hit: hit };
+      }
+      if (opts.snapGrid) return { v: Math.round(val / 10) * 10, hit: null };
+      return { v: Math.round(val), hit: null };
+    }
+
+    if (handle.indexOf('e') >= 0) {
+      edgeVal = resolveEdge(start.x + start.w + dx, opts.candX);
+      if (edgeVal.hit) hits.e = edgeVal.hit;
+      var right = Math.min(Math.max(edgeVal.v, start.x + minW), opts.canvasW);
+      rect.w = right - start.x;
+    }
+    if (handle.indexOf('w') >= 0) {
+      edgeVal = resolveEdge(start.x + dx, opts.candX);
+      if (edgeVal.hit) hits.w = edgeVal.hit;
+      var left = Math.min(Math.max(edgeVal.v, 0), start.x + start.w - minW);
+      rect.x = left;
+      rect.w = start.x + start.w - left;
+    }
+    if (handle.indexOf('s') >= 0) {
+      edgeVal = resolveEdge(start.y + start.h + dy, opts.candY);
+      if (edgeVal.hit) hits.s = edgeVal.hit;
+      var bottom = Math.min(Math.max(edgeVal.v, start.y + minH), opts.canvasH);
+      rect.h = bottom - start.y;
+    }
+    if (handle.indexOf('n') >= 0) {
+      edgeVal = resolveEdge(start.y + dy, opts.candY);
+      if (edgeVal.hit) hits.n = edgeVal.hit;
+      var top = Math.min(Math.max(edgeVal.v, 0), start.y + start.h - minH);
+      rect.y = top;
+      rect.h = start.y + start.h - top;
+    }
+    return { rect: rect, hits: hits };
+  }
+
+  /**
+   * 输入校验：X/Y/W/H 输入。必须是整数（字符串数字可），w/h >= minSize，
+   * x/y >= 0 且 x+w <= canvasW、y+h <= canvasH。
+   * 返回 { ok:true, rect } 或 { ok:false, field, msg }。
+   */
+  function validateRectInput(v, canvasW, canvasH, minSize) {
+    minSize = minSize || 10;
+    var fields = { x: 'X', y: 'Y', w: '宽', h: '高' };
+    var r = {};
+    for (var k in fields) {
+      var raw = String(v[k]).trim();
+      var n = Number(raw);
+      if (raw === '' || !Number.isFinite(n)) return { ok: false, field: fields[k], msg: '不是数字' };
+      if (!isIntLike(n)) return { ok: false, field: fields[k], msg: '必须是整数' };
+      if (n < 0) return { ok: false, field: fields[k], msg: '不能为负' };
+      r[k] = Math.round(n);
+    }
+    if (r.w < minSize) return { ok: false, field: '宽', msg: '不能小于 ' + minSize };
+    if (r.h < minSize) return { ok: false, field: '高', msg: '不能小于 ' + minSize };
+    if (r.x + r.w > canvasW) return { ok: false, field: 'X', msg: 'X+宽 超出画布（最大 X=' + (canvasW - r.w) + '）' };
+    if (r.y + r.h > canvasH) return { ok: false, field: 'Y', msg: 'Y+高 超出画布（最大 Y=' + (canvasH - r.h) + '）' };
+    return { ok: true, rect: r };
+  }
+
+  /**
+   * 可合并矩形命令：键盘微调等连续修改用。from 为起点、to 为本次终点（push 时立即应用 to）；
+   * tryMerge(to, at) 在距上次 <= mergeWindowMs（默认 500）时合并（更新终点并应用），
+   * 否则返回 false 由调用方新建命令。applyFn(item, rect) 由调用方提供（纯数据写入）。
+   */
+  function createMergeableRectCommand(item, from, to, label, applyFn, mergeWindowMs) {
+    var windowMs = mergeWindowMs || 500;
+    var fromRect = copyRect(from), toRect = copyRect(to);
+    var lastAt = -Infinity, mergedOnce = false;
+    return {
+      label: label, item: item,
+      do: function () { applyFn(item, copyRect(toRect)); },
+      undo: function () { applyFn(item, copyRect(fromRect)); },
+      tryMerge: function (rect, at) {
+        if (mergedOnce && at - lastAt > windowMs) return false;
+        toRect = copyRect(rect);
+        lastAt = at;
+        mergedOnce = true;
+        applyFn(item, copyRect(toRect));
+        return true;
+      },
+      toRect: function () { return copyRect(toRect); }
+    };
+  }
+
+  /** Shift 直线移动的主方向判定：|dx| >= |dy| 锁定水平，否则垂直（平局取水平） */
+  function dominantAxis(dx, dy) { return Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v'; }
+
   var PbiLogic = {
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, HEADER: HEADER, GRID: 10,
-    parseCSV: parseCSV, serializeCSV: serializeCSV, createCommandStack: createCommandStack
+    parseCSV: parseCSV, serializeCSV: serializeCSV, createCommandStack: createCommandStack,
+    copyRect: copyRect, rectEq: rectEq,
+    snapAxisMove: snapAxisMove, computeSnapMove: computeSnapMove,
+    snapResizeEdge: snapResizeEdge, computeResize: computeResize,
+    validateRectInput: validateRectInput,
+    createMergeableRectCommand: createMergeableRectCommand,
+    dominantAxis: dominantAxis
   };
   global.PbiLogic = PbiLogic;
   if (typeof module !== 'undefined' && module.exports) module.exports = PbiLogic;
@@ -395,9 +701,9 @@
 
 <script>
 // ============================================================================
-// 应用层：状态 / 命令 / 渲染 / 交互 分层。
-// Sprint 2 扩展点已用 [S2] 标注：组件吸附+引导线、拖边改宽高（8 手柄已渲染但
-// pointer-events:none）、坐标输入框、方向键微调、Shift 直线移动、右键保存坐标点。
+// 应用层：状态 / 命令 / 渲染 / 交互 分层（Sprint 2）。
+// 数据修改统一为完整矩形 {x,y,w,h}；所有编辑走命令层，UI 刷新统一走
+// syncAfterDataChange / updateSelectionUI。吸附/缩放等纯逻辑在 PBILOGIC 块。
 // ============================================================================
 (function () {
   'use strict';
@@ -406,25 +712,30 @@
   var MIN_ZOOM = 0.25, MAX_ZOOM = 4;
   var HIT_MIN = 10;          // 极小组件的最小可点区域（画布像素）
   var DRAG_THRESHOLD = 3;    // 屏幕像素，超过才算拖拽（否则视为点击）
+  var MIN_SIZE = 10;         // 组件最小宽高
+  var SNAP_SCREEN_PX = 10;   // 组件吸附阈值（屏幕像素，折算 10/zoom，各缩放手感一致）
+  var NUDGE_MERGE_MS = 500;  // 方向键连续移动合并窗口
 
   // ---------- 状态（数据模型层） ----------
   var state = {
     model: null,        // 解析后的模型（pages/items/eol/errors/roundNotes）
-    fileName: '',       // 原文件名（导出名 = 去扩展名 + '-modified.csv'）
+    fileName: '',
     pageIndex: 0,
     selectedId: null,
     snapGrid: true,
-    snapComp: false,    // [S2] 本迭代仅可切换状态，无实际吸附逻辑
+    snapComp: false,
     zoom: 1,
     pan: { x: 0, y: 0 },
-    spaceHeld: false
+    spaceHeld: false,
+    showCorners: true,
+    points: Object.create(null) // pageName(raw) -> [{x,y,name}]，按页独立，不进撤销栈/CSV
   };
   var itemEls = Object.create(null); // id -> svg g 元素（当前页）
 
   // 历史：全局一条命令栈，跨页面共享（见 PbiLogic.createCommandStack 注释）
   var history = L.createCommandStack(500);
 
-  // ---------- 类型配色（淡色填充 + 深描边，保证区分度） ----------
+  // ---------- 类型配色（淡色填充 + 深描边，浅色主题下保持区分度） ----------
   var TYPE_COLORS = {
     shape:                 ['#e3e8f4', '#5b6b99'],
     textbox:               ['#fdeacc', '#b98a2e'],
@@ -441,21 +752,35 @@
   };
   function colorFor(type) {
     if (TYPE_COLORS[type]) return TYPE_COLORS[type];
-    // 未知类型：按字符串哈希生成稳定淡色
     var h = 0;
     for (var i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) >>> 0;
     var hue = h % 360;
     return ['hsl(' + hue + ',45%,88%)', 'hsl(' + hue + ',40%,45%)'];
   }
 
-  // ---------- DOM 引用 ----------
+  // ---------- DOM 引用与坐标换算 ----------
   var $ = function (id) { return document.getElementById(id); };
   var workspace = $('workspace'), svg = $('viewport'), world = $('world');
 
+  /** 画布逻辑坐标 -> 工作区屏幕坐标 */
+  function worldToScreen(wx, wy) {
+    return { x: wx * state.zoom + state.pan.x, y: wy * state.zoom + state.pan.y };
+  }
+  /** 屏幕坐标 -> 画布逻辑坐标 */
+  function screenToCanvas(sx, sy) {
+    var r = svg.getBoundingClientRect();
+    return {
+      x: (sx - r.left - state.pan.x) / state.zoom,
+      y: (sy - r.top - state.pan.y) / state.zoom
+    };
+  }
+
   // ==========================================================================
   // 命令层：每条命令 = 一次完成的编辑。撤销/重做只经过这里改数据。
+  // 位置与尺寸统一为完整矩形 {x,y,w,h}（Sprint 2 前提：改宽高）。
   // ==========================================================================
-  function isModified(it) { return it.x !== it.orig.x || it.y !== it.orig.y; }
+  function applyRect(item, r) { item.x = r.x; item.y = r.y; item.w = r.w; item.h = r.h; }
+  function isModified(it) { return !L.rectEq(it, it.orig); }
   function modifiedCount() {
     if (!state.model) return 0;
     var n = 0;
@@ -463,29 +788,27 @@
     return n;
   }
 
-  function clampToCanvas(it, x, y) {
-    x = Math.min(Math.max(0, x), CW - it.w);
-    y = Math.min(Math.max(0, y), CH - it.h);
-    return { x: x, y: y };
+  function clampRect(r) {
+    return {
+      x: Math.min(Math.max(0, Math.round(r.x)), CW - r.w),
+      y: Math.min(Math.max(0, Math.round(r.y))), w: r.w, h: r.h
+    };
   }
-  function applySnap(x, y) {
-    if (state.snapGrid) {
-      x = Math.round(x / GRID) * GRID;
-      y = Math.round(y / GRID) * GRID;
-    } else {
-      x = Math.round(x); // 1px 精度
-      y = Math.round(y);
-    }
-    // [S2] 组件吸附（snapComp）在这里接入：优先于网格或在其后细化。
-    return { x: x, y: y };
+  // 上面 y 的夹紧修正（保持可读：一次完成两轴）
+  function clampRect2(r) {
+    return {
+      x: Math.min(Math.max(0, Math.round(r.x)), CW - r.w),
+      y: Math.min(Math.max(0, Math.round(r.y)), CH - r.h),
+      w: r.w, h: r.h
+    };
   }
 
-  /** 移动命令（一次拖拽结束 = 一条命令） */
-  function makeMoveCommand(item, from, to) {
+  /** 统一矩形命令：移动/缩放/输入/键盘微调全部复用 */
+  function makeRectCommand(item, from, to, label) {
     return {
-      label: '移动 ' + item.id,
-      do: function () { item.x = to.x; item.y = to.y; },
-      undo: function () { item.x = from.x; item.y = from.y; }
+      label: label || ('修改 ' + item.id),
+      do: function () { applyRect(item, L.copyRect(to)); },
+      undo: function () { applyRect(item, L.copyRect(from)); }
     };
   }
 
@@ -493,8 +816,8 @@
   function makeResetCommand(changes) {
     return {
       label: '重置',
-      do: function () { for (var i = 0; i < changes.length; i++) { changes[i].item.x = changes[i].from.x; changes[i].item.y = changes[i].from.y; } },
-      undo: function () { for (var i = 0; i < changes.length; i++) { changes[i].item.x = changes[i].to.x; changes[i].item.y = changes[i].to.y; } }
+      do: function () { for (var i = 0; i < changes.length; i++) applyRect(changes[i].item, changes[i].from); },
+      undo: function () { for (var i = 0; i < changes.length; i++) applyRect(changes[i].item, changes[i].to); }
     };
   }
 
@@ -502,6 +825,19 @@
   function execute(cmd) {
     history.push(cmd);
     syncAfterDataChange();
+  }
+
+  /** 组件吸附候选线（拖动开始时预计算一次）：同页其他组件的 左/中/右（上/中/下）+ 画布边与中心线 */
+  function buildCandidates(excludeId) {
+    var page = state.model.pages[state.pageIndex];
+    var xs = [0, CW / 2, CW], ys = [0, CH / 2, CH];
+    for (var i = 0; i < page.items.length; i++) {
+      var it = page.items[i];
+      if (it.id === excludeId) continue;
+      xs.push(it.x, it.x + it.w / 2, it.x + it.w);
+      ys.push(it.y, it.y + it.h / 2, it.y + it.h);
+    }
+    return { x: xs, y: ys };
   }
 
   // ==========================================================================
@@ -515,7 +851,7 @@
     return e;
   }
 
-  /** 构建当前页的 world 内容（背景 + 网格 + 组件）。缩放/平移只改 world 的 transform。 */
+  /** 构建当前页的 world 内容（背景 + 网格 + 引导线 + 点标记 + 组件）。缩放/平移只改 world 的 transform。 */
   function renderPage() {
     world.textContent = '';
     itemEls = Object.create(null);
@@ -536,19 +872,29 @@
     el('line', { x1: 0.5, y1: 0, x2: 0.5, y2: 100, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
     el('line', { x1: 0, y1: 0.5, x2: 100, y2: 0.5, stroke: '#b8bfca', 'stroke-width': 1 }, pattern);
     el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'url(#grid10)' }, world);
-    // 画布边界
     el('rect', { x: 0, y: 0, width: CW, height: CH, fill: 'none', stroke: '#8a93a3', 'stroke-width': 2 }, world);
 
-    // 拖拽时"原位置虚线轮廓"：一个共享元素，直接位于世界坐标
+    // 引导线（贯穿画布）与拖拽原位置虚线轮廓：共享元素，世界坐标
+    el('line', { id: 'guideV', x1: 0, y1: 0, x2: 0, y2: CH, style: 'display:none' }, world);
+    el('line', { id: 'guideH', x1: 0, y1: 0, x2: CW, y2: 0, style: 'display:none' }, world);
     el('rect', { id: 'dragGhost', x: 0, y: 0, width: 0, height: 0, fill: 'none', stroke: '#e8862e', 'stroke-width': 1.5, 'stroke-dasharray': '6 4', style: 'display:none;pointer-events:none' }, world);
+    // 已保存坐标点标记层
+    el('g', { id: 'pointsGroup' }, world);
 
     var page = state.model.pages[state.pageIndex];
     for (var i = 0; i < page.items.length; i++) buildItem(page.items[i]);
     applyTransform();
     updateSelectionUI();
+    renderPoints();
     $('listCount').textContent = page.items.length + ' 个';
     $('statusPage').textContent = '当前页：' + JSON.stringify(page.name) + '（' + (state.pageIndex + 1) + '/' + state.model.pages.length + '）';
   }
+
+  var HANDLES = [
+    ['nw', 0, 0, 'nwse-resize'], ['n', 0.5, 0, 'ns-resize'], ['ne', 1, 0, 'nesw-resize'],
+    ['e', 1, 0.5, 'ew-resize'], ['se', 1, 1, 'nwse-resize'], ['s', 0.5, 1, 'ns-resize'],
+    ['sw', 0, 1, 'nesw-resize'], ['w', 0, 0.5, 'ew-resize']
+  ];
 
   function buildItem(item) {
     var colors = colorFor(item.type);
@@ -560,27 +906,26 @@
     // 标签裁剪：太小则裁剪/仅显示 Type，不溢出
     var clipId = 'cp-' + item.id.replace(/[^a-zA-Z0-9_-]/g, '_');
     var defs = el('defs', {}, g);
-    var clipRect = el('rect', { x: 0, y: 0, width: item.w, height: item.h });
-    el('clipPath', { id: clipId }, defs).appendChild(clipRect);
+    el('clipPath', { id: clipId }, defs).appendChild(el('rect', { x: 0, y: 0, width: item.w, height: item.h }));
     var labelG = el('g', { 'clip-path': 'url(#' + clipId + ')' }, g);
     el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = item.type;
     if (item.w >= 74 && item.h >= 26) {
       el('text', { 'class': 'label label-id', x: 3, y: 24 }, labelG).textContent = '#' + item.id.slice(0, 6);
     }
-    // 8 个手柄：本迭代仅展示（CSS pointer-events:none），[S2] 才可拖
-    var HANDLE = 7;
-    [[0, 0], [0.5, 0], [1, 0], [0, 0.5], [1, 0.5], [0, 1], [0.5, 1], [1, 1]].forEach(function (p) {
-      el('rect', {
-        'class': 'handle', width: HANDLE, height: HANDLE,
-        x: p[0] * item.w - HANDLE / 2, y: p[1] * item.h - HANDLE / 2,
-        style: 'display:none'
+    // 8 个手柄：拖边/角改宽高。
+    // 命中优先级：手柄在 DOM 中位于 hit/body 之后，SVG 命中测试取最上层 -> 重叠处归手柄；
+    // 手柄区域外的命中仍归本体，极小组件可正常点选与拖动。
+    HANDLES.forEach(function (hd) {
+      var h = el('rect', {
+        'class': 'handle', 'data-h': hd[0], 'data-fx': hd[1], 'data-fy': hd[2],
+        style: 'display:none;cursor:' + hd[3]
       }, g);
+      h.addEventListener('pointerdown', function (e) { onHandlePointerDown(e, item, hd[0]); });
     });
     // "已修改"角标
     el('rect', { 'class': 'mod-badge', x: item.w - 16, y: 0, width: 16, height: 14, fill: '#e8862e' }, g);
-    var badgeText = el('text', { x: item.w - 11.5, y: 11, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', style: 'pointer-events:none' }, g);
+    var badgeText = el('text', { 'class': 'mod-badge', x: item.w - 11.5, y: 11, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', style: 'pointer-events:none' }, g);
     badgeText.textContent = '改';
-    badgeText.setAttribute('class', 'mod-badge');
 
     g.addEventListener('pointerdown', function (e) { onItemPointerDown(e, item); });
     positionItem(g, item);
@@ -588,8 +933,34 @@
     itemEls[item.id] = g;
   }
 
-  function positionItem(g, item) {
-    g.setAttribute('transform', 'translate(' + item.x + ',' + item.y + ')');
+  function positionItem(g, r) {
+    g.setAttribute('transform', 'translate(' + r.x + ',' + r.y + ')');
+  }
+
+  /** 缩放后同步组件内部几何（body/hit/裁剪/角标） */
+  function updateItemGeometry(g, r) {
+    var body = g.querySelector('.body');
+    body.setAttribute('width', r.w); body.setAttribute('height', r.h);
+    var hw = Math.max(r.w, HIT_MIN), hh = Math.max(r.h, HIT_MIN);
+    var hit = g.querySelector('.hit');
+    hit.setAttribute('x', (r.w - hw) / 2); hit.setAttribute('y', (r.h - hh) / 2);
+    hit.setAttribute('width', hw); hit.setAttribute('height', hh);
+    var cp = g.querySelector('clipPath rect');
+    cp.setAttribute('width', r.w); cp.setAttribute('height', r.h);
+    g.querySelector('rect.mod-badge').setAttribute('x', r.w - 16);
+    g.querySelector('text.mod-badge').setAttribute('x', r.w - 11.5);
+  }
+
+  /** 手柄尺寸固定为屏幕像素（不随缩放变化），位置在矩形边/角上 */
+  function layoutHandles(g, r) {
+    var hs = 9 / state.zoom, hs2 = hs / 2;
+    var handles = g.querySelectorAll('.handle');
+    for (var i = 0; i < handles.length; i++) {
+      var h = handles[i];
+      h.setAttribute('x', Number(h.getAttribute('data-fx')) * r.w - hs2);
+      h.setAttribute('y', Number(h.getAttribute('data-fy')) * r.h - hs2);
+      h.setAttribute('width', hs); h.setAttribute('height', hs);
+    }
   }
 
   function applyTransform() {
@@ -597,15 +968,9 @@
     var pct = Math.round(state.zoom * 100) + '%';
     $('zoomLabel').textContent = pct;
     $('hudZoom').textContent = pct;
-  }
-
-  /** 屏幕坐标 -> 画布逻辑坐标（整数） */
-  function screenToCanvas(sx, sy) {
-    var r = svg.getBoundingClientRect();
-    return {
-      x: (sx - r.left - state.pan.x) / state.zoom,
-      y: (sy - r.top - state.pan.y) / state.zoom
-    };
+    var sel = state.selectedId ? itemEls[state.selectedId] : null;
+    if (sel) layoutHandles(sel, findItem(state.selectedId));
+    updateCornerLabels();
   }
 
   /** 适应窗口 */
@@ -619,8 +984,62 @@
     applyTransform();
   }
 
+  /** 引导线 + 间距标签；vHit/hHit = {target, dist} 或 null */
+  function updateGuides(vHit, hHit, r) {
+    var gv = $('guideV'), gh = $('guideH'), gx = $('gapX'), gy = $('gapY');
+    var lw = 1.2 / state.zoom;
+    if (vHit) {
+      gv.setAttribute('x1', vHit.target); gv.setAttribute('x2', vHit.target);
+      gv.setAttribute('stroke-width', lw);
+      gv.style.display = 'block';
+      var s = worldToScreen(vHit.target, r.y + r.h / 2);
+      gx.textContent = '间距 ' + vHit.dist;
+      gx.style.left = (s.x + 8) + 'px'; gx.style.top = (s.y - 10) + 'px';
+      gx.style.display = 'block';
+    } else { gv.style.display = 'none'; gx.style.display = 'none'; }
+    if (hHit) {
+      gh.setAttribute('y1', hHit.target); gh.setAttribute('y2', hHit.target);
+      gh.setAttribute('stroke-width', lw);
+      gh.style.display = 'block';
+      var s2 = worldToScreen(r.x + r.w / 2, hHit.target);
+      gy.textContent = '间距 ' + hHit.dist;
+      gy.style.left = (s2.x + 8) + 'px'; gy.style.top = (s2.y - 10) + 'px';
+      gy.style.display = 'block';
+    } else { gh.style.display = 'none'; gy.style.display = 'none'; }
+  }
+  function hideGuides() { updateGuides(null, null, { x: 0, y: 0, w: 0, h: 0 }); }
+
+  /** 选中组件四角坐标标签（屏幕固定字号；位置在角外侧，越界时夹紧到画布内，不遮挡手柄） */
+  function updateCornerLabels() {
+    var item = state.selectedId ? findItem(state.selectedId) : null;
+    var show = state.showCorners && item && state.model;
+    var c0 = worldToScreen(0, 0), c1 = worldToScreen(CW, CH);
+    var cfg = [
+      ['clTL', item ? item.x : 0, item ? item.y : 0, '(x,y)', -1, -1, 'translate(-100%,-100%)'],
+      ['clTR', item ? item.x + item.w : 0, item ? item.y : 0, '(x+w,y)', 1, -1, 'translate(0,-100%)'],
+      ['clBL', item ? item.x : 0, item ? item.y + item.h : 0, '(x,y+h)', -1, 1, 'translate(-100%,0)'],
+      ['clBR', item ? item.x + item.w : 0, item ? item.y + item.h : 0, '(x+w,y+h)', 1, 1, 'none']
+    ];
+    for (var i = 0; i < cfg.length; i++) {
+      var div = $(cfg[i][0]);
+      if (!show) { div.style.display = 'none'; continue; }
+      var label = i === 0 ? '(' + item.x + ', ' + item.y + ')'
+        : i === 1 ? '(' + (item.x + item.w) + ', ' + item.y + ')'
+        : i === 2 ? '(' + item.x + ', ' + (item.y + item.h) + ')'
+        : '(' + (item.x + item.w) + ', ' + (item.y + item.h) + ')';
+      var s = worldToScreen(cfg[i][1], cfg[i][2]);
+      var x = s.x + cfg[i][3] * 5, y = s.y + cfg[i][4] * 5;
+      x = Math.min(Math.max(x, c0.x + 2), c1.x - 72);
+      y = Math.min(Math.max(y, c0.y + 2), c1.y - 14);
+      div.textContent = label;
+      div.style.transform = cfg[i][5];
+      div.style.left = x + 'px'; div.style.top = y + 'px';
+      div.style.display = 'block';
+    }
+  }
+
   // ==========================================================================
-  // 组件列表（与画布选中联动）
+  // 组件列表 / 选中（与画布联动）
   // ==========================================================================
   function renderList() {
     var list = $('compList');
@@ -651,10 +1070,21 @@
   function selectItem(id) {
     state.selectedId = id;
     updateSelectionUI();
-    // 列表滚动到选中项
     var list = $('compList');
     var selRow = list.querySelector('.row.selected');
     if (selRow) selRow.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** 输入框同步：仅在"用户未正在编辑"时覆盖，避免打字被刷新打断 */
+  function syncInputs(item) {
+    var ids = ['inX', 'inY', 'inW', 'inH'];
+    for (var i = 0; i < ids.length; i++) $(ids[i]).disabled = !item;
+    if (!item) return;
+    var active = document.activeElement;
+    var editing = active && ids.indexOf(active.id) >= 0 && active.dataset.dirty === '1';
+    if (editing) return;
+    $('inX').value = item.x; $('inY').value = item.y;
+    $('inW').value = item.w; $('inH').value = item.h;
   }
 
   function updateSelectionUI() {
@@ -666,33 +1096,43 @@
         var sel = page.items[i].id === state.selectedId;
         g.classList.toggle('selected', sel);
         var handles = g.querySelectorAll('.handle');
-        for (var h = 0; h < handles.length; h++) handles[h].style.display = sel ? '' : 'none';
+        for (var h = 0; h < handles.length; h++) handles[h].style.display = sel ? 'block' : 'none';
+        if (sel) layoutHandles(g, page.items[i]);
       }
     }
     var item = state.selectedId ? findItem(state.selectedId) : null;
     var hud = $('hudSelection');
     if (item) {
       hud.style.display = '';
-      hud.textContent = '选中  X:' + item.x + '  Y:' + item.y + '  W:' + item.w + '  H:' + item.h + '（只读，输入框为 S2）';
+      hud.textContent = '选中 ' + item.type + ' #' + item.id.slice(0, 6) + '（拖手柄改宽高）';
       $('statusSel').textContent = '选中：' + item.type + ' #' + item.id.slice(0, 6);
+      $('vpTL').textContent = '(' + item.x + ', ' + item.y + ')';
+      $('vpTR').textContent = '(' + (item.x + item.w) + ', ' + item.y + ')';
+      $('vpBL').textContent = '(' + item.x + ', ' + (item.y + item.h) + ')';
+      $('vpBR').textContent = '(' + (item.x + item.w) + ', ' + (item.y + item.h) + ')';
+      $('vpC').textContent = '(' + (item.x + item.w / 2) + ', ' + (item.y + item.h / 2) + ')';
     } else {
       hud.style.display = 'none';
       $('statusSel').textContent = '未选中组件';
+      ['vpTL', 'vpTR', 'vpBL', 'vpBR', 'vpC'].forEach(function (id) { $(id).textContent = '—'; });
     }
-    // 列表选中态
+    syncInputs(item);
     var rows = $('compList').children;
     for (var r = 0; r < rows.length; r++) {
       rows[r].classList.toggle('selected', rows[r].title === state.selectedId);
     }
+    $('btnCorners').classList.toggle('on', state.showCorners);
+    updateCornerLabels();
   }
 
-  /** 数据变化后的统一刷新（命令执行/撤销/重做/重置后调用） */
+  /** 数据变化后的统一刷新（命令执行/撤销/重做/重置/键盘微调后调用） */
   function syncAfterDataChange() {
     var page = state.model.pages[state.pageIndex];
     for (var i = 0; i < page.items.length; i++) {
       var it = page.items[i], g = itemEls[it.id];
       if (!g) continue;
       positionItem(g, it);
+      updateItemGeometry(g, it);
       g.classList.toggle('modified', isModified(it));
     }
     renderList();
@@ -708,9 +1148,9 @@
   }
 
   // ==========================================================================
-  // 消息提示
+  // 消息 / 提示
   // ==========================================================================
-  function showMsg(kind, title, lines) {
+  function showMsg(kind, title, lines, opts) {
     var box = $('messages');
     var div = document.createElement('div');
     div.className = 'msg ' + kind;
@@ -726,9 +1166,138 @@
         li.textContent = lines[i];
         ul.appendChild(li);
       }
+      if (opts && opts.collapsible) {
+        ul.style.display = 'none';
+        var toggle = document.createElement('span');
+        toggle.className = 'details-toggle';
+        toggle.textContent = '展开 ' + lines.length + ' 条详情 ▾';
+        toggle.addEventListener('click', function () {
+          var open = ul.style.display !== 'none';
+          ul.style.display = open ? 'none' : '';
+          toggle.textContent = (open ? '展开 ' : '收起 ') + lines.length + ' 条详情 ' + (open ? '▾' : '▴');
+        });
+        div.appendChild(toggle);
+      }
       div.appendChild(ul);
     }
     box.appendChild(div);
+  }
+
+  var toastTimer = null;
+  function showToast(text) {
+    var t = $('toast');
+    t.textContent = text;
+    t.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.style.display = 'none'; }, 2200);
+  }
+
+  function copyText(text) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var okFlag = false;
+      try { okFlag = document.execCommand('copy'); } catch (e) { okFlag = false; }
+      ta.remove();
+      showToast(okFlag ? '已复制' : '复制失败，请手动复制：' + text);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { showToast('已复制'); }, fallback);
+    } else { fallback(); }
+  }
+
+  // ==========================================================================
+  // 已保存坐标点（右键）：按页独立，不进撤销栈、不进 CSV
+  // ==========================================================================
+  function pageName() { return state.model.pages[state.pageIndex].name; }
+  function pagePoints() {
+    var n = pageName();
+    if (!state.points[n]) state.points[n] = [];
+    return state.points[n];
+  }
+
+  function renderPoints() {
+    var g = $('pointsGroup');
+    if (!g) return;
+    g.textContent = '';
+    var pts = state.model ? (state.points[pageName()] || []) : [];
+    for (var i = 0; i < pts.length; i++) {
+      (function (p, idx) {
+        var s = 6 / state.zoom, lw = 1.5 / state.zoom;
+        var mk = el('g', { 'class': 'pt-marker', 'data-i': idx }, g);
+        el('line', { x1: p.x - s, y1: p.y, x2: p.x + s, y2: p.y, 'stroke-width': lw }, mk);
+        el('line', { x1: p.x, y1: p.y - s, x2: p.x, y2: p.y + s, 'stroke-width': lw }, mk);
+        el('circle', { cx: p.x, cy: p.y, r: 2.5 / state.zoom }, mk);
+      })(pts[i], i);
+    }
+    renderPointList(pts);
+  }
+
+  function renderPointList(pts) {
+    var list = $('pointList');
+    list.textContent = '';
+    $('btnCopyPoints').disabled = !pts.length;
+    $('btnClearPoints').disabled = !pts.length;
+    if (!pts.length) {
+      var ph = document.createElement('div');
+      ph.className = 'placeholder';
+      ph.textContent = '在画布上右键单击保存坐标点。';
+      list.appendChild(ph);
+      return;
+    }
+    for (var i = 0; i < pts.length; i++) {
+      (function (p, idx) {
+        var row = document.createElement('div');
+        row.className = 'pt-row';
+        var idxSpan = document.createElement('span');
+        idxSpan.className = 'idx'; idxSpan.textContent = (idx + 1) + '.';
+        var name = document.createElement('input');
+        name.className = 'name'; name.value = p.name; name.title = '点击可改名';
+        name.addEventListener('change', function () { p.name = name.value.trim() || p.name; name.value = p.name; });
+        name.addEventListener('keydown', function (e) { e.stopPropagation(); });
+        var xy = document.createElement('span');
+        xy.className = 'xy'; xy.textContent = '(' + p.x + ', ' + p.y + ')';
+        var btnCopy = document.createElement('button');
+        btnCopy.textContent = '复制'; btnCopy.title = '复制 "x, y"';
+        btnCopy.addEventListener('click', function () { copyText(p.x + ', ' + p.y); });
+        var btnDel = document.createElement('button');
+        btnDel.textContent = '删除';
+        btnDel.addEventListener('click', function () {
+          pts.splice(idx, 1);
+          renderPoints();
+        });
+        row.appendChild(idxSpan); row.appendChild(name); row.appendChild(xy);
+        row.appendChild(btnCopy); row.appendChild(btnDel);
+        // 联动：点击行在画布上闪烁定位；悬停高亮标记
+        row.addEventListener('click', function (e) {
+          if (e.target === name || e.target.tagName === 'BUTTON') return;
+          flashPoint(idx);
+        });
+        row.addEventListener('mouseenter', function () {
+          var mk = g_query(idx); if (mk) mk.classList.add('hl');
+        });
+        row.addEventListener('mouseleave', function () {
+          var mk = g_query(idx); if (mk) mk.classList.remove('hl');
+        });
+        list.appendChild(row);
+      })(pts[i], i);
+    }
+    function g_query(idx) {
+      var g = $('pointsGroup');
+      return g ? g.querySelector('.pt-marker[data-i="' + idx + '"]') : null;
+    }
+  }
+
+  function flashPoint(idx) {
+    var g = $('pointsGroup');
+    if (!g) return;
+    var mk = g.querySelector('.pt-marker[data-i="' + idx + '"]');
+    if (!mk) return;
+    mk.classList.add('flash');
+    setTimeout(function () { mk.classList.remove('flash'); }, 1200);
   }
 
   // ==========================================================================
@@ -741,18 +1310,17 @@
         showMsg('error', '导入失败：未能解析任何组件行', model.errors.map(fmtError));
         return;
       }
-      // 设置重置基准
+      // 重置基准：完整矩形（位置 + 尺寸）
       for (var i = 0; i < model.items.length; i++) {
-        var it = model.items[i];
-        it.orig = { x: it.x, y: it.y };
+        model.items[i].orig = { x: model.items[i].x, y: model.items[i].y, w: model.items[i].w, h: model.items[i].h };
       }
       state.model = model;
       state.fileName = file.name;
       state.pageIndex = 0;
       state.selectedId = null;
+      state.points = Object.create(null);
       history.clear();
 
-      // 页面切换下拉
       var sel = $('pageSelect');
       sel.textContent = '';
       model.pages.forEach(function (pg, idx) {
@@ -767,27 +1335,24 @@
       $('fileLabel').textContent = file.name;
       $('fileLabel').title = file.name;
       $('statusFile').textContent = '已导入：' + file.name + '（共 ' + model.items.length + ' 个组件，' + model.pages.length + ' 页）';
-      ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit'].forEach(function (id) { $(id).disabled = false; });
+      ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit', 'btnCorners'].forEach(function (id) { $(id).disabled = false; });
 
       renderPage();
       renderList();
       updateToolbar();
       requestAnimationFrame(fitToWindow);
 
-      // 导入提示：数量 + 四舍五入 + 错误行
-      var notes = [];
-      if (model.roundNotes.length) {
-        notes = model.roundNotes.map(function (r) {
-          return '第 ' + r.line + ' 行（Id: ' + r.id + '）字段 ' + r.fields.join('/') + ' 含小数，已四舍五入';
-        });
-      }
+      // 导入提示：小数取整合并为一条可折叠汇总；错误行仍逐条列出
       if (model.errors.length) {
         showMsg('warn', '导入完成：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页；' + model.errors.length + ' 行错误未导入', model.errors.map(fmtError));
       }
-      if (notes.length) {
-        showMsg('warn', model.roundNotes.length + ' 行坐标含小数，已四舍五入（详见列表）', notes);
+      if (model.roundNotes.length) {
+        showMsg('warn', model.roundNotes.length + ' 行坐标含小数，已四舍五入',
+          model.roundNotes.map(function (r) {
+            return '第 ' + r.line + ' 行（Id: ' + r.id + '）字段 ' + r.fields.join('/') + ' 含小数，已四舍五入';
+          }), { collapsible: true });
       }
-      if (!model.errors.length && !notes.length) {
+      if (!model.errors.length && !model.roundNotes.length) {
         showMsg('', '导入成功：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页');
       }
     }).catch(function (err) {
@@ -814,9 +1379,10 @@
   }
 
   // ==========================================================================
-  // 交互层：拖拽 / 平移 / 缩放
+  // 交互层：拖拽移动 / 手柄缩放 / 平移 / 缩放
+  // drag.mode: 'move' | 'resize' | 'pan'
   // ==========================================================================
-  var drag = null; // { mode:'move'|'pan', item, startCanvas, origPos, lastPos, moved }
+  var drag = null;
 
   /** 捕获指针；合成事件无活动指针时会抛错，忽略即可 */
   function capturePointer(e) {
@@ -827,8 +1393,27 @@
     if (e.button !== 0 || state.spaceHeld) return; // 空格/中键 = 平移
     e.stopPropagation();
     selectItem(item.id);
-    var c = screenToCanvas(e.clientX, e.clientY);
-    drag = { mode: 'move', item: item, pointerId: e.pointerId, startCanvas: c, origPos: { x: item.x, y: item.y }, curPos: { x: item.x, y: item.y }, startScreen: { x: e.clientX, y: e.clientY }, moved: false };
+    drag = {
+      mode: 'move', item: item, pointerId: e.pointerId,
+      startCanvas: screenToCanvas(e.clientX, e.clientY),
+      origRect: L.copyRect(item), curRect: L.copyRect(item),
+      startScreen: { x: e.clientX, y: e.clientY },
+      moved: false, lock: null, cand: buildCandidates(item.id)
+    };
+    capturePointer(e);
+  }
+
+  function onHandlePointerDown(e, item, handle) {
+    if (e.button !== 0 || state.spaceHeld) return;
+    e.stopPropagation();
+    selectItem(item.id);
+    drag = {
+      mode: 'resize', handle: handle, item: item, pointerId: e.pointerId,
+      startCanvas: screenToCanvas(e.clientX, e.clientY),
+      origRect: L.copyRect(item), curRect: L.copyRect(item),
+      startScreen: { x: e.clientX, y: e.clientY },
+      moved: false, cand: buildCandidates(item.id)
+    };
     capturePointer(e);
   }
 
@@ -844,81 +1429,154 @@
   }
 
   svg.addEventListener('pointerdown', function (e) {
-    // 空白处（未命中组件/背景 rect 已各自处理）；svg 根上兜底启动平移
-    if (e.target === svg) startPan(e);
+    if (e.target === svg) startPan(e); // svg 根兜底
   });
 
+  /** 拖拽开始共用的 ghost 显示 */
+  function showGhost(r) {
+    var ghost = $('dragGhost');
+    ghost.setAttribute('x', r.x); ghost.setAttribute('y', r.y);
+    ghost.setAttribute('width', r.w); ghost.setAttribute('height', r.h);
+    ghost.setAttribute('style', 'pointer-events:none');
+  }
+  function hideGhost() { $('dragGhost').setAttribute('style', 'display:none;pointer-events:none'); }
+
+  /** 移动拖拽的位置求解：Shift 锁轴 -> 组件吸附（命中优先） -> 网格/1px -> 夹紧 */
+  function solveMove(e, c) {
+    var d = drag;
+    var dx = c.x - d.startCanvas.x, dy = c.y - d.startCanvas.y;
+    var rawX = d.origRect.x + dx, rawY = d.origRect.y + dy;
+    if (e.shiftKey) {
+      // Shift 直线移动：按累计位移主方向锁定；按住期间不翻转，松开重按才重新判定
+      if (!d.lock) d.lock = L.dominantAxis(dx, dy);
+      if (d.lock === 'h') rawY = d.origRect.y;
+      else rawX = d.origRect.x;
+    } else { d.lock = null; }
+    var th = SNAP_SCREEN_PX / state.zoom;
+    var fx = rawX, fy = rawY, vHit = null, hHit = null;
+    if (state.snapComp) {
+      var hits = L.computeSnapMove({ x: rawX, y: rawY, w: d.item.w, h: d.item.h }, d.cand.x, d.cand.y, th);
+      if (hits.x) { fx = rawX + hits.x.delta; vHit = { target: hits.x.target, dist: hits.x.dist }; }
+      if (hits.y) { fy = rawY + hits.y.delta; hHit = { target: hits.y.target, dist: hits.y.dist }; }
+    }
+    if (!vHit) fx = state.snapGrid ? Math.round(fx / GRID) * GRID : Math.round(fx);
+    if (!hHit) fy = state.snapGrid ? Math.round(fy / GRID) * GRID : Math.round(fy);
+    var r = clampRect2({ x: fx, y: fy, w: d.item.w, h: d.item.h });
+    return { rect: r, vHit: vHit, hHit: hHit };
+  }
+
+  function solveResize(c) {
+    var d = drag;
+    return L.computeResize(d.origRect, d.handle, c.x - d.startCanvas.x, c.y - d.startCanvas.y, {
+      snapGrid: state.snapGrid, snapComp: state.snapComp,
+      threshold: SNAP_SCREEN_PX / state.zoom,
+      candX: d.cand.x, candY: d.cand.y,
+      minW: MIN_SIZE, minH: MIN_SIZE, canvasW: CW, canvasH: CH
+    });
+  }
+
   svg.addEventListener('pointermove', function (e) {
-    // 悬停坐标（US-04）：画布整数坐标
     var c = screenToCanvas(e.clientX, e.clientY);
+
+    // 悬停坐标 HUD（US-04）
     var hud = $('hudMouse');
     if (c.x >= 0 && c.x <= CW && c.y >= 0 && c.y <= CH) {
       hud.style.display = '';
       hud.textContent = '鼠标  X:' + Math.round(c.x) + '  Y:' + Math.round(c.y);
-    } else {
-      hud.style.display = 'none';
-    }
+    } else { hud.style.display = 'none'; }
 
-    if (!drag) return;
+    // 悬停组件提示（未拖拽时）
+    if (!drag) {
+      var gEl = e.target && e.target.closest ? e.target.closest('g.item') : null;
+      var tip = $('hoverTip');
+      if (gEl) {
+        var it = findItem(gEl.getAttribute('data-id'));
+        if (it) {
+          var wr = workspace.getBoundingClientRect();
+          tip.textContent = it.type + '  #' + it.id.slice(0, 6) + '  x:' + it.x + ' y:' + it.y + ' w:' + it.w + ' h:' + it.h;
+          tip.style.left = (e.clientX - wr.left + 14) + 'px';
+          tip.style.top = (e.clientY - wr.top + 12) + 'px';
+          tip.style.display = 'block';
+        }
+      } else { tip.style.display = 'none'; }
+      return;
+    }
+    $('hoverTip').style.display = 'none';
+
     if (drag.mode === 'pan') {
       state.pan.x = drag.startPan.x + (e.clientX - drag.startScreen.x);
       state.pan.y = drag.startPan.y + (e.clientY - drag.startScreen.y);
       applyTransform();
       return;
     }
-    // mode = move
+
+    // 移动 / 缩放
     if (!drag.moved) {
       var dxs = e.clientX - drag.startScreen.x, dys = e.clientY - drag.startScreen.y;
       if (Math.sqrt(dxs * dxs + dys * dys) < DRAG_THRESHOLD) return;
       drag.moved = true;
-      // 原位置保留虚线轮廓（世界坐标，不随拖动元素移动）
-      var ghost = $('dragGhost');
-      ghost.setAttribute('x', drag.item.x);
-      ghost.setAttribute('y', drag.item.y);
-      ghost.setAttribute('width', drag.item.w);
-      ghost.setAttribute('height', drag.item.h);
-      ghost.setAttribute('style', 'pointer-events:none');
+      showGhost(drag.origRect);
     }
-    var rawX = drag.origPos.x + (c.x - drag.startCanvas.x);
-    var rawY = drag.origPos.y + (c.y - drag.startCanvas.y);
-    var snapped = applySnap(rawX, rawY);
-    var clamped = clampToCanvas(drag.item, snapped.x, snapped.y);
-    drag.curPos = clamped;
-    // 只更新受影响元素：被拖组件的 transform + HUD
-    positionItem(itemEls[drag.item.id], { x: clamped.x, y: clamped.y, w: drag.item.w, h: drag.item.h });
+    var g = itemEls[drag.item.id];
     var hudD = $('hudDrag');
     hudD.style.display = '';
-    hudD.textContent = '拖拽  x:' + clamped.x + '  y:' + clamped.y +
-      '  w:' + drag.item.w + '  h:' + drag.item.h +
-      '  Δx:' + (clamped.x - drag.origPos.x) + '  Δy:' + (clamped.y - drag.origPos.y);
+    if (drag.mode === 'move') {
+      var mv = solveMove(e, c);
+      drag.curRect = mv.rect;
+      positionItem(g, mv.rect);
+      updateGuides(mv.vHit, mv.hHit, mv.rect);
+      hudD.textContent = '拖拽  x:' + mv.rect.x + '  y:' + mv.rect.y +
+        '  w:' + mv.rect.w + '  h:' + mv.rect.h +
+        '  Δx:' + (mv.rect.x - drag.origRect.x) + '  Δy:' + (mv.rect.y - drag.origRect.y);
+    } else {
+      var rs = solveResize(c);
+      drag.curRect = rs.rect;
+      positionItem(g, rs.rect);
+      updateItemGeometry(g, rs.rect);
+      layoutHandles(g, rs.rect);
+      var vHit = rs.hits.e || rs.hits.w || null;
+      var hHit = rs.hits.s || rs.hits.n || null;
+      updateGuides(vHit, hHit, rs.rect);
+      hudD.textContent = '缩放  x:' + rs.rect.x + '  y:' + rs.rect.y +
+        '  w:' + rs.rect.w + '  h:' + rs.rect.h;
+    }
   });
 
-  function endDrag(e) {
+  function endDrag() {
     if (!drag) return;
     var d = drag;
     drag = null;
     workspace.classList.remove('panning');
-    if (d.mode === 'move') {
-      $('dragGhost').setAttribute('style', 'display:none;pointer-events:none');
+    $('hoverTip').style.display = 'none';
+    if (d.mode === 'move' || d.mode === 'resize') {
+      hideGhost();
+      hideGuides();
       $('hudDrag').style.display = 'none';
-      if (d.moved) {
-        execute(makeMoveCommand(d.item, d.origPos, d.curPos));
+      if (d.moved && !L.rectEq(d.curRect, d.origRect)) {
+        execute(makeRectCommand(d.item, d.origRect, d.curRect, d.mode === 'move' ? '移动 ' : '缩放 ' + d.item.id));
       } else {
+        positionItem(itemEls[d.item.id], d.item);
+        updateItemGeometry(itemEls[d.item.id], d.item);
         updateSelectionUI(); // 纯点击选中
       }
     }
   }
-  svg.addEventListener('pointerup', endDrag);
-  svg.addEventListener('pointercancel', function () {
-    if (drag && drag.mode === 'move' && drag.moved) {
-      // 取消拖拽：恢复原位，不产生命令
+
+  function cancelDrag() {
+    if (!drag) return;
+    if ((drag.mode === 'move' || drag.mode === 'resize') && drag.moved) {
       positionItem(itemEls[drag.item.id], drag.item);
-      $('dragGhost').setAttribute('style', 'display:none;pointer-events:none');
-      $('hudDrag').style.display = 'none';
+      updateItemGeometry(itemEls[drag.item.id], drag.item);
     }
     drag = null;
     workspace.classList.remove('panning');
-  });
+    hideGhost(); hideGuides();
+    $('hudDrag').style.display = 'none';
+    $('hoverTip').style.display = 'none';
+  }
+
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', cancelDrag);
 
   // 滚轮缩放（以鼠标为中心，25%~400%，不改变任何坐标）
   workspace.addEventListener('wheel', function (e) {
@@ -928,13 +1586,84 @@
     var mx = e.clientX - r.left, my = e.clientY - r.top;
     var factor = Math.exp(-e.deltaY * 0.0012);
     var z2 = Math.min(Math.max(state.zoom * factor, MIN_ZOOM), MAX_ZOOM);
-    // 鼠标下的世界点保持不动：pan' = m - (m - pan) * (z2/z)
     var k = z2 / state.zoom;
     state.pan.x = mx - (mx - state.pan.x) * k;
     state.pan.y = my - (my - state.pan.y) * k;
     state.zoom = z2;
     applyTransform();
   }, { passive: false });
+
+  // 右键保存坐标点（屏蔽浏览器菜单；也可点在组件上，左键行为不受影响）
+  svg.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    if (!state.model) return;
+    var c = screenToCanvas(e.clientX, e.clientY);
+    var x = Math.round(c.x), y = Math.round(c.y);
+    if (state.snapGrid) { x = Math.round(x / GRID) * GRID; y = Math.round(y / GRID) * GRID; }
+    x = Math.min(Math.max(0, x), CW);
+    y = Math.min(Math.max(0, y), CH);
+    var pts = pagePoints();
+    pts.push({ x: x, y: y, name: '点 ' + (pts.length + 1) });
+    renderPoints();
+  });
+
+  // ==========================================================================
+  // 坐标输入框（X/Y/宽/高）
+  // ==========================================================================
+  var INPUTS = ['inX', 'inY', 'inW', 'inH'];
+
+  function applyInputs() {
+    var it = state.selectedId ? findItem(state.selectedId) : null;
+    if (!it) return;
+    var v = L.validateRectInput({
+      x: $('inX').value, y: $('inY').value, w: $('inW').value, h: $('inH').value
+    }, CW, CH, MIN_SIZE);
+    if (!v.ok) {
+      showToast('字段 ' + v.field + '：' + v.msg + '，已回退原值');
+      // 先清 dirty 再同步，否则 syncInputs 会把焦点框视为"编辑中"而跳过回退
+      INPUTS.forEach(function (id) { $(id).dataset.dirty = '0'; });
+      syncInputs(it);
+      return;
+    }
+    if (L.rectEq(v.rect, it)) return; // 未变化不产生命令
+    execute(makeRectCommand(it, L.copyRect(it), v.rect, '输入 ' + it.id));
+  }
+
+  INPUTS.forEach(function (id) {
+    var input = $(id);
+    input.addEventListener('focus', function () { input.select(); });
+    input.addEventListener('input', function () { input.dataset.dirty = '1'; });
+    input.addEventListener('blur', function () {
+      input.dataset.dirty = '0';
+      var it = state.selectedId ? findItem(state.selectedId) : null;
+      if (it) syncInputs(it); // 未应用就离开 -> 回退显示
+    });
+    input.addEventListener('keydown', function (e) {
+      e.stopPropagation(); // 输入框内快捷键不触发全局（复制粘贴/撤销仍可用）
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyInputs(); // 应用并保持焦点
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        input.dataset.dirty = '0';
+        var it = state.selectedId ? findItem(state.selectedId) : null;
+        if (it) syncInputs(it);
+        input.blur(); // 放弃编辑并返回画布
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        var i = INPUTS.indexOf(id);
+        var next = INPUTS[(i + (e.shiftKey ? INPUTS.length - 1 : 1)) % INPUTS.length];
+        $(next).focus();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        var step = e.shiftKey ? 10 : 1;
+        var n = Number(String(input.value).trim());
+        if (!Number.isFinite(n)) return;
+        input.value = Math.round(n) + (e.key === 'ArrowUp' ? step : -step);
+        input.dataset.dirty = '1';
+      }
+    });
+  });
 
   // ==========================================================================
   // 工具栏 / 键盘事件绑定
@@ -952,9 +1681,34 @@
     this.classList.toggle('on', state.snapGrid);
   });
   $('btnSnapComp').addEventListener('click', function () {
-    state.snapComp = !state.snapComp; // [S2] 仅切换状态，吸附逻辑 Sprint 2 实现
+    state.snapComp = !state.snapComp;
     this.classList.toggle('on', state.snapComp);
-    showMsg('', '组件吸附：' + (state.snapComp ? '开' : '关') + '（吸附逻辑将于 Sprint 2 提供）');
+    showToast('组件吸附：' + (state.snapComp ? '开' : '关'));
+  });
+
+  $('btnCorners').addEventListener('click', function () {
+    state.showCorners = !state.showCorners;
+    this.classList.toggle('on', state.showCorners);
+    $('chkCorners').checked = state.showCorners;
+    updateCornerLabels();
+  });
+  $('chkCorners').addEventListener('change', function () {
+    state.showCorners = this.checked;
+    $('btnCorners').classList.toggle('on', state.showCorners);
+    updateCornerLabels();
+  });
+  $('btnHelp').addEventListener('click', function () {
+    document.body.classList.toggle('help-open');
+  });
+
+  $('btnCopyPoints').addEventListener('click', function () {
+    var pts = state.model ? (state.points[pageName()] || []) : [];
+    if (!pts.length) return;
+    copyText(pts.map(function (p) { return p.name + ': ' + p.x + ', ' + p.y; }).join('\n'));
+  });
+  $('btnClearPoints').addEventListener('click', function () {
+    state.points[pageName()] = [];
+    renderPoints();
   });
 
   $('btnUndo').addEventListener('click', function () { history.undo(); syncAfterDataChange(); });
@@ -963,9 +1717,9 @@
     var changes = [];
     for (var i = 0; i < state.model.items.length; i++) {
       var it = state.model.items[i];
-      if (isModified(it)) changes.push({ item: it, from: { x: it.orig.x, y: it.orig.y }, to: { x: it.x, y: it.y } });
+      if (isModified(it)) changes.push({ item: it, from: L.copyRect(it.orig), to: L.copyRect(it) });
     }
-    if (!changes.length) { showMsg('', '当前没有任何改动'); return; }
+    if (!changes.length) { showToast('当前没有任何改动'); return; }
     execute(makeResetCommand(changes));
   });
 
@@ -976,20 +1730,56 @@
     renderList();
   });
 
-  // 键盘：Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z；空格 = 临时平移
-  // [S2] 方向键微调、Shift 直线移动在这里扩展
+  /** 方向键微调：1px / Shift 10px，不受吸附影响；连续按键（间隔 <500ms）合并为一条撤销命令 */
+  function nudgeSelected(dx, dy) {
+    var it = state.selectedId ? findItem(state.selectedId) : null;
+    if (!it) return;
+    var to = clampRect2({ x: it.x + dx, y: it.y + dy, w: it.w, h: it.h });
+    if (L.rectEq(to, it)) return;
+    var now = Date.now();
+    var top = history.peek();
+    if (top && top.tryMerge && top.item === it && top.tryMerge(to, now)) {
+      syncAfterDataChange();
+    } else {
+      execute(L.createMergeableRectCommand(it, L.copyRect(it), to, '微调 ' + it.id, applyRect, NUDGE_MERGE_MS));
+    }
+  }
+
+  function isEditingInput() {
+    var a = document.activeElement;
+    return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT');
+  }
+
   window.addEventListener('keydown', function (e) {
-    if (e.key === ' ' && !e.ctrlKey && !e.metaKey) {
+    if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !isEditingInput()) {
       state.spaceHeld = true;
       workspace.classList.add('space-held');
       e.preventDefault();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    if (e.key === 'Escape' && drag) { cancelDrag(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !isEditingInput()) {
       e.preventDefault(); history.undo(); syncAfterDataChange();
-    } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
-      e.preventDefault(); history.redo(); syncAfterDataChange();
+      return;
     }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')) && !isEditingInput()) {
+      e.preventDefault(); history.redo(); syncAfterDataChange();
+      return;
+    }
+    if (isEditingInput()) return; // 焦点在输入框/下拉时，其余快捷键归它们自己
+
+    // Enter / F2：聚焦 X 框并全选（选中组件后无需额外点击即可输入）
+    if ((e.key === 'Enter' || e.key === 'F2') && state.selectedId) {
+      var tag = e.target.tagName;
+      if (tag !== 'BUTTON') { $('inX').focus(); e.preventDefault(); }
+      return;
+    }
+    // 方向键微调
+    var step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeSelected(-step, 0); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeSelected(step, 0); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); nudgeSelected(0, -step); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); nudgeSelected(0, step); }
   });
   window.addEventListener('keyup', function (e) {
     if (e.key === ' ') { state.spaceHeld = false; workspace.classList.remove('space-held'); }
@@ -1008,7 +1798,6 @@
     if (f) handleFile(f);
   });
 
-  // 窗口尺寸变化时保持可用（不自动改缩放，避免打扰）
   window.addEventListener('resize', function () { applyTransform(); });
 })();
 </script>
