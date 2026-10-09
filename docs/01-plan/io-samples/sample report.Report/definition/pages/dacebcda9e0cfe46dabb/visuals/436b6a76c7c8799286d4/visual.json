@@ -4,10 +4,10 @@
   "position": {
     "x": 460,
     "y": 30,
-    "z": 3,
-    "height": 130,
-    "width": 602.5,
-    "tabOrder": 3
+    "z": 3000,
+    "height": 110,
+    "width": 360,
+    "tabOrder": 3000
   },
   "visual": {
     "visualType": "textbox",
@@ -21,7 +21,7 @@
                   {
                     "value": "1231231",
                     "textStyle": {
-                      "fontSize": "60pt"
+                      "fontSize": "36pt"
                     }
                   }
                 ]

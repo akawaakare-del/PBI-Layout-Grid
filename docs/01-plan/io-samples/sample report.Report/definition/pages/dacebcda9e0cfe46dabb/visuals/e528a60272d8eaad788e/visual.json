@@ -4,10 +4,10 @@
   "position": {
     "x": 25,
     "y": 930,
-    "z": 8,
+    "z": 8000,
     "height": 150,
     "width": 325,
-    "tabOrder": 8
+    "tabOrder": 8000
   },
   "visual": {
     "visualType": "slicer",
@@ -50,23 +50,5 @@
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "1c90520e29d28cbd0b72",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "销售明细"
-              }
-            },
-            "Property": "客户等级"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

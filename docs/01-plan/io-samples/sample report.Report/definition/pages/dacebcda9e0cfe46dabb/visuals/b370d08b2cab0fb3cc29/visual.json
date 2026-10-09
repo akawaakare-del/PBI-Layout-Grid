@@ -2,12 +2,12 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "b370d08b2cab0fb3cc29",
   "position": {
-    "x": 27.5,
+    "x": 28,
     "y": 160,
-    "z": 6,
-    "height": 342.5,
-    "width": 325,
-    "tabOrder": 6
+    "z": 6000,
+    "height": 158,
+    "width": 324,
+    "tabOrder": 6000
   },
   "visual": {
     "visualType": "advancedSlicerVisual",
@@ -67,23 +67,5 @@
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "bd9daa00ca365aa16dda",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "销售明细"
-              }
-            },
-            "Property": "区域"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

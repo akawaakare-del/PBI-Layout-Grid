@@ -2,12 +2,12 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "b0d882f2231e9efadd49",
   "position": {
-    "x": 687.5,
-    "y": 331.25,
-    "z": 13,
-    "height": 171.25,
-    "width": 197.5,
-    "tabOrder": 13
+    "x": 658,
+    "y": 260,
+    "z": 13000,
+    "height": 154,
+    "width": 198,
+    "tabOrder": 13000
   },
   "visual": {
     "visualType": "cardVisual",
@@ -71,6 +71,13 @@
                   "Value": "'卡片1'"
                 }
               }
+            },
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
             }
           }
         }
@@ -81,7 +88,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "5001da3e42218374d657",
+        "name": "da5dfcd11b811567eb01",
         "field": {
           "Aggregation": {
             "Expression": {

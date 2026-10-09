@@ -3,11 +3,11 @@
   "name": "d377cc90b1d0d5f6fd21",
   "position": {
     "x": 460,
-    "y": 160,
-    "z": 2,
-    "height": 157.5,
-    "width": 197.5,
-    "tabOrder": 2
+    "y": 110,
+    "z": 2000,
+    "height": 130,
+    "width": 162,
+    "tabOrder": 2000
   },
   "visual": {
     "visualType": "cardVisual",
@@ -66,7 +66,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "7f1a827098a2d75c7831",
+        "name": "dc9ed432d2cb7bfdab7a",
         "field": {
           "Aggregation": {
             "Expression": {
