@@ -91,16 +91,18 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
 }
 
 // ============================================================================
-// 5. 真实样例：68 个组件、1 页，新格式（含 Title/Z 列）
-//    说明：当前样例坐标已全部为整数（无小数行），roundNotes 应为 0
+// 5. Sprint 4 真实样例：14 个组件、1 页，新格式（含 Title/Z 列），其中 2 行越界照常导入
+//    说明：样例坐标已全部为整数（无小数行），roundNotes 应为 0
 // ============================================================================
 {
   const sample = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'docs', '01-plan', 'io-samples', 'Project Portfolio Tracker-layout.csv'), 'utf8');
   const model = L.parseCSV(sample);
-  eq(model.items.length, 68, '样例：68 个组件全部导入');
+  eq(model.items.length, 14, '样例：14 个组件全部导入（越界行不再拒绝）');
+  eq(model.totalRows, 14, '样例：CSV 共 14 行');
   eq(model.pages.length, 1, '样例：1 页');
   eq(model.pages[0].name, '  嘉聯', '样例：Page 前导空格保留');
   eq(model.errors.length, 0, '样例：无错误行');
+  eq(model.warnings.length, 0, '样例：无警告');
   ok(model.hasTitle && model.hasZ, '样例：识别出 Title 与 Z 列');
   eq(model.header.join(','), 'Page,Id,Type,Title,X,Y,Width,Height,Z', '样例：列顺序以输入为准');
   eq(model.roundNotes.length, 0, '样例：坐标均为整数，无四舍五入提示');
@@ -109,29 +111,35 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
   eq(model.items[1].w, 220, '样例：第 2 个组件 top_bg 宽度 220');
   // Title 解析：第 1 行 Title 为 "已完成数"，存在空 Title 行
   eq(model.items[0].title, '已完成数', '样例：Title 原样解析');
-  ok(model.items.some(i => i.title === ''), '样例：空 Title（不带引号空值）解析为空串');
-  // Z 解析：不连续整数
-  ok(model.items.some(i => i.z === 17000), '样例：Z=17000 解析正确');
+  ok(model.items.some(i => i.title === ''), '样例：空 Title（"" 空值）解析为空串');
+  // 越界集合：恰为 Id fb5630...（y+h=1080）与 e528a...（x+w=1400）两行
+  const oobIds = model.items.filter(i => L.rectOutOfBounds(i, 1280, 720)).map(i => i.id).sort();
+  eq(oobIds.join(','), ['e528a60272d8eaad788e', 'fb5630e539d444a5edb0'].sort().join(','), '样例：越界集合恰为指定两行');
 }
 
 // ============================================================================
-// 6. 非法行提示：非数字 / 负数 / 超出画布 / 字段数错误；错误行不阻断其他行
+// 6. 非法行提示：非数字 / 负数 / 宽高<=0 / 字段数错误；越界行（Sprint 4）照常导入
 // ============================================================================
 {
   const csv = '"Page","Id","Type","X","Y","Width","Height"\n' +
     '"P1","good","textbox","0","0","100","50"\n' +          // 第 2 行 ok
     '"P1","badnum","textbox","abc","0","100","50"\n' +      // 第 3 行 非数字
     '"P1","neg","textbox","-5","0","100","50"\n' +          // 第 4 行 负数
-    '"P1","oob","textbox","1200","0","200","50"\n' +        // 第 5 行 超出画布
-    '"P1","few","textbox","0","0","100"\n' +                // 第 6 行 字段数 6
-    '"P1","after","textbox","0","0","100","50"\n';          // 第 7 行 ok
+    '"P1","oob","textbox","1200","0","200","50"\n' +        // 第 5 行 越界：Sprint 4 起照常导入
+    '"P1","zerow","textbox","0","0","0","50"\n' +           // 第 6 行 宽=0
+    '"P1","few","textbox","0","0","100"\n' +                // 第 7 行 字段数 6
+    '"P1","after","textbox","0","0","100","50"\n';          // 第 8 行 ok
   const model = L.parseCSV(csv);
-  eq(model.items.length, 2, '错误行被跳过，其余行正常导入');
-  eq(model.errors.length, 4, '共 4 个错误');
+  eq(model.totalRows, 7, '数据行总数 7（含损坏行）');
+  eq(model.items.length, 3, '越界行导入，其余损坏行跳过');
+  eq(model.errors.length, 4, '共 4 个错误（非数字/负数/宽0/字段数）');
   ok(model.errors.some(e => e.line === 3 && e.id === 'badnum' && e.field === 'X' && /不是数字/.test(e.msg)), '第 3 行 X 非数字：行号/Id/字段正确');
   ok(model.errors.some(e => e.line === 4 && e.field === 'X' && /负数/.test(e.msg)), '第 4 行 X 负数提示');
-  ok(model.errors.some(e => e.line === 5 && /超出/.test(e.msg)), '第 5 行超出画布提示');
-  ok(model.errors.some(e => e.line === 6 && /字段数/.test(e.msg)), '第 6 行字段数错误提示');
+  ok(model.errors.some(e => e.line === 6 && e.field === 'Width' && /大于 0/.test(e.msg)), '第 6 行宽 0 提示');
+  ok(model.errors.some(e => e.line === 7 && /字段数/.test(e.msg)), '第 7 行字段数错误提示');
+  const oobItem = model.items.find(i => i.id === 'oob');
+  ok(!!oobItem && oobItem.x === 1200 && oobItem.w === 200, '第 5 行越界照常导入（x=1200, w=200）');
+  ok(L.rectOutOfBounds(oobItem, 1280, 720), '第 5 行被判定为越界');
 }
 
 // ============================================================================
@@ -557,6 +565,138 @@ function eq(a, b, name) { ok(a === b, name + (a === b ? '' : '（期望 ' + JSON
   ok(!L.is169(0, 9), '宽为 0 拒绝');
   ok(!L.is169(1600, 0), '高为 0 拒绝');
   ok(!L.is169(1200, 900), '4:3 拒绝');
+}
+
+// ============================================================================
+// 24. Sprint 4 越界判定：边界值（恰好贴边不算越界；1281/721 算；负坐标算）
+// ============================================================================
+{
+  const CW = 1280, CH = 720;
+  ok(!L.rectOutOfBounds({ x: 0, y: 0, w: 1280, h: 720 }, CW, CH), '整画布矩形不算越界');
+  ok(!L.rectOutOfBounds({ x: 1180, y: 670, w: 100, h: 50 }, CW, CH), 'x+w=1280、y+h=720 恰好贴边不算越界');
+  ok(L.rectOutOfBounds({ x: 1181, y: 0, w: 100, h: 50 }, CW, CH), 'x+w=1281 算越界');
+  ok(L.rectOutOfBounds({ x: 0, y: 671, w: 100, h: 50 }, CW, CH), 'y+h=721 算越界');
+  ok(L.rectOutOfBounds({ x: -1, y: 0, w: 100, h: 50 }, CW, CH), 'x=-1 算越界');
+  ok(L.rectOutOfBounds({ x: 0, y: -10, w: 100, h: 50 }, CW, CH), 'y=-10 算越界');
+  eq(L.oobAmount({ x: 0, y: 0, w: 1280, h: 720 }, CW, CH), 0, '界内矩形越界量为 0');
+  eq(L.oobAmount({ x: 0, y: 0, w: 373, h: 1080 }, CW, CH), 360, '高度 1080 越界量 = 360');
+  eq(L.oobAmount({ x: 1100, y: 300, w: 300, h: 40 }, CW, CH), 120, '右缘 1400 越界量 = 120');
+  eq(L.oobAmount({ x: -5, y: 0, w: 100, h: 730 }, CW, CH), 15, '左 5 + 下 10，越界量累加 = 15');
+}
+
+// ============================================================================
+// 25. Sprint 4 移动约束 clampDragRect：越界组件向画布内可动、更深越界拒绝、界内夹紧
+// ============================================================================
+{
+  const CW = 1280, CH = 720;
+  const oobFrom = { x: 0, y: 0, w: 373, h: 1080 }; // 越界量 360（底边 1080-720）
+  // 向画布内移动：y -50（上移）-> 越界量 310，允许
+  let r = L.clampDragRect(oobFrom, { x: 0, y: -50, w: 373, h: 1080 }, CW, CH);
+  eq(r.y, -50, '越界组件向画布内移动被允许（y 上移 50）');
+  // 平行移动：x +100，越界量不变，允许
+  r = L.clampDragRect(oobFrom, { x: 100, y: 0, w: 373, h: 1080 }, CW, CH);
+  eq(r.x, 100, '越界组件平行移动被允许（越界程度不变）');
+  // 向更深越界移动：y +50 -> 越界量 410，拒绝（停在原处）
+  r = L.clampDragRect(oobFrom, { x: 0, y: 50, w: 373, h: 1080 }, CW, CH);
+  eq(r.y, 0, '越界组件向更深越界方向移动被拒绝（停在原处）');
+  // 已在界内：出界移动被夹紧回画布（原有行为）
+  r = L.clampDragRect({ x: 100, y: 100, w: 100, h: 50 }, { x: 1300, y: 100, w: 100, h: 50 }, CW, CH);
+  eq(r.x, 1180, '界内组件右移出界：夹紧到 x=1180（右边贴 1280）');
+  eq(r.y, 100, '界内组件另一轴不受影响');
+  r = L.clampDragRect({ x: 100, y: 100, w: 100, h: 50 }, { x: -30, y: 700, w: 100, h: 50 }, CW, CH);
+  eq(r.x, 0, '界内组件左移出界：夹紧到 x=0');
+  eq(r.y, 670, '界内组件下移出界：夹紧到 y=670（底边贴 720）');
+}
+
+// ============================================================================
+// 26. Sprint 4 缩放边界：越界组件的边可向内收回（不被画布夹紧卡死）
+// ============================================================================
+{
+  const base = { snapGrid: false, snapComp: false, threshold: 10, candX: [], candY: [], minW: 10, minH: 10, canvasW: 1280, canvasH: 720 };
+  // s 手柄：起点底边 1080（越界），向上拖 500 -> 底边 580（可越过 720 向内收回）
+  let r = L.computeResize({ x: 0, y: 0, w: 373, h: 1080 }, 's', 0, -500, base);
+  eq(r.rect.h, 580, '缩放：越界组件 s 手柄可向内收回（h=580，不被夹在 720）');
+  // s 手柄：向下拖（更深越界）-> 不允许超过起点底边 1080
+  r = L.computeResize({ x: 0, y: 0, w: 373, h: 1080 }, 's', 0, 200, base);
+  eq(r.rect.h, 1080, '缩放：越界组件 s 手柄不允许更深越界（停在 1080）');
+  // 界内组件保持原行为：s 手柄底缘夹紧 720（h = 720 - 100 = 620）
+  r = L.computeResize({ x: 100, y: 100, w: 100, h: 50 }, 's', 0, 2000, base);
+  eq(r.rect.h, 620, '缩放：界内组件 s 手柄底缘仍夹紧 720');
+  // e 手柄：起点右边 1400（越界），向左收回可到 1280 以内
+  r = L.computeResize({ x: 1100, y: 300, w: 300, h: 40 }, 'e', -200, 0, base);
+  eq(r.rect.w, 100, '缩放：越界组件 e 手柄可向内收回（w=100，右边 1200）');
+}
+
+// ============================================================================
+// 27. Sprint 4 输入校验：越界组件"更不越界"的值接受，"更越界"拒绝
+// ============================================================================
+{
+  const CW = 1280, CH = 720;
+  const from = { x: 0, y: 0, w: 373, h: 1080 }; // 越界量 360
+  // 高度改回 700（进入画布内）：接受
+  let v = L.validateRectInput({ x: '0', y: '0', w: '373', h: '700' }, CW, CH, 10, from);
+  ok(v.ok && v.rect.h === 700, '校验：越界组件高度改小（回到画布内）被接受');
+  // 高度改成 1200（越界量 480 > 360）：拒绝
+  v = L.validateRectInput({ x: '0', y: '0', w: '373', h: '1200' }, CW, CH, 10, from);
+  ok(!v.ok && /越界/.test(v.msg), '校验：越界组件输入更重越界的值被拒绝');
+  // 高度不变 1080（越界量相同）：接受（保持原样显示/编辑）
+  v = L.validateRectInput({ x: '0', y: '0', w: '373', h: '1080' }, CW, CH, 10, from);
+  ok(v.ok, '校验：越界组件维持原值（同等越界）被接受');
+  // 界内组件保持原行为：出界拒绝
+  v = L.validateRectInput({ x: '1200', y: '0', w: '100', h: '50' }, CW, CH, 10, { x: 0, y: 0, w: 100, h: 50 });
+  ok(!v.ok && /超出画布/.test(v.msg), '校验：界内组件修改后出界仍被拒绝');
+  // 不传 fromRect（旧调用方式）保持原行为
+  v = L.validateRectInput({ x: '1200', y: '0', w: '100', h: '50' }, CW, CH, 10);
+  ok(!v.ok && /超出画布/.test(v.msg), '校验：无 fromRect 时保持画布边界校验');
+}
+
+// ============================================================================
+// 28. Sprint 4 样例往返：导入 -> 不改动导出 -> 14 行，数值与输入逐字节一致（除 BOM）
+// ============================================================================
+{
+  const sample = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'docs', '01-plan', 'io-samples', 'Project Portfolio Tracker-layout.csv'), 'utf8');
+  const model = L.parseCSV(sample);
+  const out = L.serializeCSV(model);
+  const lines = out.trim().split('\n');
+  eq(lines.length, 15, '往返：导出表头 + 14 行');
+  eq(out, sample.slice(1), '往返：不改动导出与输入逐字节一致（越界值原样透传）');
+}
+
+// ============================================================================
+// 29. Sprint 4 真损坏行：字符串数字 / 负数 / 宽高 0 / Z 非整数 仍进 errors，items 不含
+// ============================================================================
+{
+  const csv = '"Page","Id","Type","Title","X","Y","Width","Height","Z"\n' +
+    '"P1","s1","textbox","t","abc","0","100","50","0"\n' +        // 字符串数字
+    '"P1","s2","textbox","t","-1","0","100","50","0"\n' +         // 负数
+    '"P1","s3","textbox","t","0","0","0","50","0"\n' +            // 宽 0
+    '"P1","s4","textbox","t","0","0","100","50","1.5"\n' +        // Z 非整数
+    '"P1","ok","textbox","t","0","0","100","50","0"\n';           // 正常行
+  const model = L.parseCSV(csv);
+  eq(model.totalRows, 5, '损坏行测试：共 5 行');
+  eq(model.items.length, 1, '仅正常行进入 items');
+  eq(model.items[0].id, 'ok', '正常行保留');
+  eq(model.errors.length, 4, '4 行损坏全部进入 errors');
+  ok(model.errors.some(e => e.id === 's1' && /不是数字/.test(e.msg)), '字符串数字报错');
+  ok(model.errors.some(e => e.id === 's2' && /负数/.test(e.msg)), '负数报错');
+  ok(model.errors.some(e => e.id === 's3' && /大于 0/.test(e.msg)), '宽 0 报错');
+  ok(model.errors.some(e => e.id === 's4' && e.field === 'Z' && /不是整数/.test(e.msg)), 'Z 非整数报错');
+}
+
+// ============================================================================
+// 30. Sprint 4 Id 重复：各行保留 + 警告；跨页同名 Id 不算重复
+// ============================================================================
+{
+  const csv = '"Page","Id","Type","X","Y","Width","Height"\n' +
+    '"P1","dup","textbox","0","0","100","50"\n' +
+    '"P1","dup","textbox","10","10","100","50"\n' +   // 同页重复
+    '"P2","dup","textbox","0","0","100","50"\n' +     // 跨页同名 Id：合法
+    '"P1","uni","textbox","0","0","100","50"\n';
+  const model = L.parseCSV(csv);
+  eq(model.items.length, 4, 'Id 重复行全部保留，不丢弃');
+  eq(model.errors.length, 0, 'Id 重复不产生错误');
+  eq(model.warnings.length, 1, '同页 Id 重复给出 1 条警告');
+  ok(/Id 重复/.test(model.warnings[0].msg) && model.warnings[0].id === 'dup' && model.warnings[0].line === 3, '警告含行号/Id/原因');
 }
 
 console.log('----------------------------------------');

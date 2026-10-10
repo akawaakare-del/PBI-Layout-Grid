@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PBI Layout Grid — 布局调整工具（Sprint 3）</title>
+<title>PBI Layout Grid — 布局调整工具（Sprint 4）</title>
 <style>
   /* ============ 基础与布局（浅色主题，颜色集中于此便于换肤） ============ */
   :root {
@@ -173,7 +173,7 @@
   }
   #workspace.panning { cursor: grabbing; }
   #workspace.space-held { cursor: grab; }
-  svg#viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  svg#viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; } /* Sprint 4：溢出可见，越界组件超出画布部分仍可见可操作 */
 
   /* HUD：不随画布缩放，保证读数清晰 */
   .hud {
@@ -224,6 +224,13 @@
   .item.locked { opacity: .45; pointer-events: none; }
   .item .lock-badge { display: none; }
   .item.locked .lock-badge { display: block; }
+  /* Sprint 4：越界组件——红框 + 淡红填充 + ⚠ 标签（selected 高亮仍优先） */
+  .item.oob .body { fill: #fbdede; stroke: var(--danger); }
+  .item.oob .label { fill: var(--danger); font-weight: 600; }
+  #compList .row .oob-badge {
+    flex: none; font-size: 10px; color: #fff; background: var(--danger);
+    border-radius: 3px; padding: 0 4px; margin-left: auto;
+  }
   #guideV, #guideH { stroke: var(--guide); pointer-events: none; }
   .pt-marker { pointer-events: none; }
   .pt-marker circle { fill: var(--point); }
@@ -277,6 +284,31 @@
     border-top: 1px solid var(--border);
     color: var(--text-dim); font-size: 12px;
     display: flex; gap: 20px;
+  }
+  /* Sprint 4：导入核对（X<Y 时红色醒目）与越界计数 */
+  #statusImport.bad { color: var(--danger); font-weight: 600; }
+  #statusOob { color: var(--danger); font-weight: 600; display: none; }
+
+  /* Sprint 4：导入错误/警告模态框（防静默丢行：必须用户确认） */
+  #importErrModal {
+    position: fixed; inset: 0; z-index: 70; display: none;
+    background: rgba(30, 36, 48, .42);
+    align-items: center; justify-content: center;
+  }
+  body.modal-open #importErrModal { display: flex; }
+  #importErrModal .box {
+    background: var(--panel); border-radius: 6px; box-shadow: var(--shadow);
+    width: 560px; max-width: 92vw; max-height: 72vh;
+    display: flex; flex-direction: column; color: var(--text);
+  }
+  #importErrModal h3 { padding: 12px 16px 8px; font-size: 13px; }
+  #importErrModal .list {
+    flex: 1; overflow-y: auto; padding: 0 16px 8px;
+    font-size: 12px; line-height: 1.9; font-family: Consolas, monospace;
+  }
+  #importErrModal .list .warn-line { color: var(--modified); }
+  #importErrModal .foot {
+    padding: 10px 16px; text-align: right; border-top: 1px solid var(--border);
   }
 </style>
 </head>
@@ -382,14 +414,24 @@
 </div>
 
 <footer id="statusbar">
-  <span id="statusFile">未导入文件</span>
+  <span id="statusImport">未导入文件</span>
   <span id="statusPage">—</span>
   <span id="statusSel">未选中组件</span>
   <span id="statusLock">已锁定 0 / 0</span>
+  <span id="statusOob">越界 0 个</span>
 </footer>
 
 <div id="dropOverlay">松开以导入 CSV / 蓝图图片</div>
 <div id="toast"></div>
+
+<!-- Sprint 4：导入核对模态框（损坏行 / Id 重复警告，须点击"知道了"关闭） -->
+<div id="importErrModal">
+  <div class="box">
+    <h3 id="importErrTitle">导入核对</h3>
+    <div class="list" id="importErrList"></div>
+    <div class="foot"><button id="btnImportErrOk" class="primary">知道了</button></div>
+  </div>
+</div>
 
 <div id="helpOverlay">
   <h3>快捷键与用法</h3>
@@ -453,8 +495,9 @@
   function isIntLike(n) { return Math.abs(n - Math.round(n)) < 1e-9; }
 
   /**
-   * 解析 CSV 文本为数据模型（Sprint 3：列顺序以输入表头为准，Title/Z 可选）。
-   * 返回 { eol, header, hasTitle, hasZ, pages, items, errors, roundNotes }
+   * 解析 CSV 文本为数据模型（Sprint 3：列顺序以输入表头为准，Title/Z 可选；
+   * Sprint 4：越界行照常导入，totalRows/warnings 支撑导入核对）。
+   * 返回 { eol, header, hasTitle, hasZ, pages, items, errors, roundNotes, totalRows, warnings }
    * 错误行不导入但不阻断其他行；错误信息含"第几行 / 哪个 Id / 哪个字段"。
    */
   function parseCSV(text) {
@@ -474,7 +517,7 @@
       if (rawLines[li].trim() !== '') { firstIdx = li; break; }
     }
     if (firstIdx < 0) {
-      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: [{ line: 0, id: '-', field: '-', msg: '文件为空' }], roundNotes: [] };
+      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: [{ line: 0, id: '-', field: '-', msg: '文件为空' }], roundNotes: [], totalRows: 0, warnings: [] };
     }
 
     // 表头校验（放宽）：必需列 Page,Id,Type,X,Y,Width,Height 齐全即可；Title、Z 可选；
@@ -485,14 +528,18 @@
     var missing = REQUIRED_COLS.filter(function (h) { return colIdx[h] === undefined; });
     if (missing.length) {
       errors.push({ line: firstIdx + 1, id: '-', field: '-', msg: '表头缺少必需列：' + missing.join(',') + '，实际为：' + headerFields.join(',') });
-      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: errors, roundNotes: roundNotes };
+      return { eol: eol, header: HEADER.slice(), hasTitle: false, hasZ: false, pages: [], items: [], errors: errors, roundNotes: roundNotes, totalRows: 0, warnings: [] };
     }
     var hasTitle = colIdx.Title !== undefined, hasZ = colIdx.Z !== undefined;
 
+    // Sprint 4：totalRows = 非空数据行总数（含损坏行，供"导入 X / CSV 共 Y 行"核对）；
+    // warnings：不丢弃但需警告的行（如同页 Id 重复）
+    var totalRows = 0, warnings = [], seenIds = Object.create(null);
     for (var i = firstIdx + 1; i < rawLines.length; i++) {
       var lineNo = i + 1; // 1 起始，含表头
       var line = rawLines[i];
       if (line.trim() === '') continue; // 空行跳过
+      totalRows++;
       var f = parseCsvLine(line);
       if (f.length !== headerFields.length) {
         errors.push({ line: lineNo, id: (f[colIdx.Id] != null ? f[colIdx.Id] : '-') || '-', field: '-', msg: '字段数为 ' + f.length + '，应为 ' + headerFields.length });
@@ -522,9 +569,8 @@
         }
       }
       if (!bad && (nums.w <= 0 || nums.h <= 0)) bad = { field: nums.w <= 0 ? 'Width' : 'Height', msg: '必须大于 0' };
-      if (!bad && (nums.x + nums.w > CANVAS_W || nums.y + nums.h > CANVAS_H)) {
-        bad = { field: nums.x + nums.w > CANVAS_W ? 'X/Width' : 'Y/Height', msg: '超出 1280×720 画布（x+w=' + (nums.x + nums.w) + ', y+h=' + (nums.y + nums.h) + '）' };
-      }
+      // Sprint 4：越界行（x+w>1280 / y+h>720）不再拒绝——照常导入并标记"越界"，
+      // 原则：导入 N 行 = 工具内 N 个组件 = 导出 N 行，任何行不静默丢弃。
       if (bad) {
         errors.push({ line: lineNo, id: id || '-', field: bad.field, msg: bad.msg });
         continue;
@@ -546,8 +592,12 @@
       }
       pageMap[page].items.push(item);
       items.push(item);
+      // Sprint 4：同页 Id 重复——保留各行，但给出警告（回写按 Id 定位会有歧义）
+      var idKey = page + '' + id;
+      if (seenIds[idKey]) warnings.push({ line: lineNo, id: id, msg: 'Id 重复（同页内出现多次，回写按 Id 定位会有歧义）' });
+      else seenIds[idKey] = true;
     }
-    return { eol: eol, header: headerFields.slice(), hasTitle: hasTitle, hasZ: hasZ, pages: pages, items: items, errors: errors, roundNotes: roundNotes };
+    return { eol: eol, header: headerFields.slice(), hasTitle: hasTitle, hasZ: hasZ, pages: pages, items: items, errors: errors, roundNotes: roundNotes, totalRows: totalRows, warnings: warnings };
   }
 
   /**
@@ -616,6 +666,38 @@
 
   function copyRect(r) { return { x: r.x, y: r.y, w: r.w, h: r.h }; }
   function rectEq(a, b) { return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h; }
+
+  // ==========================================================================
+  // Sprint 4 纯逻辑：越界判定 / 越界程度 / 移动约束 / 缩放边界 / 输入校验放宽
+  // ==========================================================================
+
+  /** 越界判定：矩形任一侧超出画布即越界；恰好贴边（x+w=1280、y+h=720）不算。 */
+  function rectOutOfBounds(r, cw, ch) {
+    return r.x < 0 || r.y < 0 || r.x + r.w > cw || r.y + r.h > ch;
+  }
+  /** 越界程度：四边溢出量之和（0 = 完全在画布内；数值越大越严重）。 */
+  function oobAmount(r, cw, ch) {
+    return Math.max(0, -r.x) + Math.max(0, -r.y) +
+           Math.max(0, r.x + r.w - cw) + Math.max(0, r.y + r.h - ch);
+  }
+  /**
+   * 移动约束（Sprint 4）：移动后越界程度不得比移动前更大。
+   *  - 目标更不越界或同等（可向画布内/平行移动）：放行——越界组件不被边界"卡死"；
+   *  - 原在界内、目标出界：夹紧回画布内（沿用 Sprint 2 行为）；
+   *  - 原已越界、目标更重：拒绝，停在原处。
+   */
+  function clampDragRect(from, to, cw, ch) {
+    var fromOob = oobAmount(from, cw, ch);
+    if (oobAmount(to, cw, ch) <= fromOob) return to;
+    if (fromOob === 0) {
+      return {
+        x: Math.min(Math.max(0, to.x), cw - to.w),
+        y: Math.min(Math.max(0, to.y), ch - to.h),
+        w: to.w, h: to.h
+      };
+    }
+    return { x: from.x, y: from.y, w: from.w, h: from.h };
+  }
 
   /**
    * 移动吸附（单轴）：被拖矩形的 3 条线（左/上=0、中心=1、右/下=2）与候选线逐一比对，
@@ -689,26 +771,28 @@
     if (handle.indexOf('e') >= 0) {
       edgeVal = resolveEdge(start.x + start.w + dx, opts.candX);
       if (edgeVal.hit) hits.e = edgeVal.hit;
-      var right = Math.min(Math.max(edgeVal.v, start.x + minW), opts.canvasW);
+      // Sprint 4：起点右边已越界时允许向内收回（上限不重于起点），未越界保持画布右缘夹紧
+      var right = Math.min(Math.max(edgeVal.v, start.x + minW), Math.max(opts.canvasW, start.x + start.w));
       rect.w = right - start.x;
     }
     if (handle.indexOf('w') >= 0) {
       edgeVal = resolveEdge(start.x + dx, opts.candX);
       if (edgeVal.hit) hits.w = edgeVal.hit;
-      var left = Math.min(Math.max(edgeVal.v, 0), start.x + start.w - minW);
+      // 起点左边已出界（x<0）时允许向右收回，不允许更向左
+      var left = Math.min(Math.max(edgeVal.v, Math.min(0, start.x)), start.x + start.w - minW);
       rect.x = left;
       rect.w = start.x + start.w - left;
     }
     if (handle.indexOf('s') >= 0) {
       edgeVal = resolveEdge(start.y + start.h + dy, opts.candY);
       if (edgeVal.hit) hits.s = edgeVal.hit;
-      var bottom = Math.min(Math.max(edgeVal.v, start.y + minH), opts.canvasH);
+      var bottom = Math.min(Math.max(edgeVal.v, start.y + minH), Math.max(opts.canvasH, start.y + start.h));
       rect.h = bottom - start.y;
     }
     if (handle.indexOf('n') >= 0) {
       edgeVal = resolveEdge(start.y + dy, opts.candY);
       if (edgeVal.hit) hits.n = edgeVal.hit;
-      var top = Math.min(Math.max(edgeVal.v, 0), start.y + start.h - minH);
+      var top = Math.min(Math.max(edgeVal.v, Math.min(0, start.y)), start.y + start.h - minH);
       rect.y = top;
       rect.h = start.y + start.h - top;
     }
@@ -716,11 +800,13 @@
   }
 
   /**
-   * 输入校验：X/Y/W/H 输入。必须是整数（字符串数字可），w/h >= minSize，
-   * x/y >= 0 且 x+w <= canvasW、y+h <= canvasH。
+   * 输入校验：X/Y/W/H 输入。必须是整数（字符串数字可），w/h >= minSize，x/y >= 0。
+   * Sprint 4：fromRect 为"修改前矩形"。修改前已越界的组件放宽画布边界——
+   * 只要新矩形【越界程度不重于】修改前即接受（如把高度改回 720 以内）；
+   * 修改前在界内则保持原 canvasW/H 边界校验。
    * 返回 { ok:true, rect } 或 { ok:false, field, msg }。
    */
-  function validateRectInput(v, canvasW, canvasH, minSize) {
+  function validateRectInput(v, canvasW, canvasH, minSize, fromRect) {
     minSize = minSize || 10;
     var fields = { x: 'X', y: 'Y', w: '宽', h: '高' };
     var r = {};
@@ -734,6 +820,12 @@
     }
     if (r.w < minSize) return { ok: false, field: '宽', msg: '不能小于 ' + minSize };
     if (r.h < minSize) return { ok: false, field: '高', msg: '不能小于 ' + minSize };
+    if (fromRect && rectOutOfBounds(fromRect, canvasW, canvasH)) {
+      if (oobAmount(r, canvasW, canvasH) > oobAmount(fromRect, canvasW, canvasH) + 1e-9) {
+        return { ok: false, field: 'X', msg: '修改会加重越界（当前越界量 ' + oobAmount(fromRect, canvasW, canvasH) + '）' };
+      }
+      return { ok: true, rect: r };
+    }
     if (r.x + r.w > canvasW) return { ok: false, field: 'X', msg: 'X+宽 超出画布（最大 X=' + (canvasW - r.w) + '）' };
     if (r.y + r.h > canvasH) return { ok: false, field: 'Y', msg: 'Y+高 超出画布（最大 Y=' + (canvasH - r.h) + '）' };
     return { ok: true, rect: r };
@@ -854,6 +946,7 @@
     CANVAS_W: CANVAS_W, CANVAS_H: CANVAS_H, HEADER: HEADER, GRID: 10,
     parseCSV: parseCSV, serializeCSV: serializeCSV, createCommandStack: createCommandStack,
     copyRect: copyRect, rectEq: rectEq,
+    rectOutOfBounds: rectOutOfBounds, oobAmount: oobAmount, clampDragRect: clampDragRect,
     snapAxisMove: snapAxisMove, computeSnapMove: computeSnapMove,
     snapResizeEdge: snapResizeEdge, computeResize: computeResize,
     validateRectInput: validateRectInput,
@@ -966,20 +1059,7 @@
     return n;
   }
 
-  function clampRect(r) {
-    return {
-      x: Math.min(Math.max(0, Math.round(r.x)), CW - r.w),
-      y: Math.min(Math.max(0, Math.round(r.y))), w: r.w, h: r.h
-    };
-  }
-  // 上面 y 的夹紧修正（保持可读：一次完成两轴）
-  function clampRect2(r) {
-    return {
-      x: Math.min(Math.max(0, Math.round(r.x)), CW - r.w),
-      y: Math.min(Math.max(0, Math.round(r.y)), CH - r.h),
-      w: r.w, h: r.h
-    };
-  }
+  // 注：位置夹紧统一走 PbiLogic.clampDragRect（Sprint 4：越界组件可向画布内移动）
 
   /** 统一矩形命令：移动/缩放/输入/键盘微调全部复用 */
   function makeRectCommand(item, from, to, label) {
@@ -1114,7 +1194,8 @@
 
   function buildItem(item) {
     var colors = colorFor(item.type);
-    var g = el('g', { 'class': 'item', 'data-id': item.id }, world);
+    var oob = L.rectOutOfBounds(item, CW, CH); // Sprint 4：越界组件红框淡红填充
+    var g = el('g', { 'class': 'item' + (oob ? ' oob' : ''), 'data-id': item.id }, world);
     // 最小可点区域保护：透明 hit 矩形，极小组件也能点中
     var hw = Math.max(item.w, HIT_MIN), hh = Math.max(item.h, HIT_MIN);
     el('rect', { 'class': 'hit', x: (item.w - hw) / 2, y: (item.h - hh) / 2, width: hw, height: hh }, g);
@@ -1124,8 +1205,8 @@
     var defs = el('defs', {}, g);
     el('clipPath', { id: clipId }, defs).appendChild(el('rect', { x: 0, y: 0, width: item.w, height: item.h }));
     var labelG = el('g', { 'clip-path': 'url(#' + clipId + ')' }, g);
-    // 标签：优先 Title（只读、原样透传），无 Title 回退 Type；Id 前 6 位为次要小字
-    el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = item.title || item.type;
+    // 标签：优先 Title（只读、原样透传），无 Title 回退 Type；越界组件前加 ⚠；Id 前 6 位为次要小字
+    el('text', { 'class': 'label', x: 3, y: 12 }, labelG).textContent = (oob ? '⚠ ' : '') + (item.title || item.type);
     if (item.w >= 74 && item.h >= 26) {
       el('text', { 'class': 'label label-id', x: 3, y: 24 }, labelG).textContent = '#' + item.id.slice(0, 6);
     }
@@ -1258,6 +1339,12 @@
         name.textContent = item.title || item.type;
         var id = document.createElement('span'); id.className = 'id'; id.textContent = '#' + item.id.slice(0, 6);
         row.appendChild(lock); row.appendChild(dot); row.appendChild(name); row.appendChild(id);
+        // Sprint 4：越界组件列表行红色"越界"小标记
+        if (L.rectOutOfBounds(item, CW, CH)) {
+          var ob = document.createElement('span');
+          ob.className = 'oob-badge'; ob.textContent = '越界';
+          row.appendChild(ob);
+        }
         row.title = item.id;
         row.addEventListener('click', function () { selectItem(item.id); });
         list.appendChild(row);
@@ -1373,6 +1460,15 @@
       updateItemGeometry(g, it);
       g.classList.toggle('modified', isModified(it));
       g.classList.toggle('locked', !!state.locked[it.id]);
+      // Sprint 4：越界标记随位置/尺寸动态更新（拖回画布内红标自动消失）
+      var oob = L.rectOutOfBounds(it, CW, CH);
+      g.classList.toggle('oob', oob);
+      var colors = colorFor(it.type);
+      var body = g.querySelector('.body');
+      body.setAttribute('fill', oob ? '#fbdede' : colors[0]);
+      body.setAttribute('stroke', oob ? '#d64545' : colors[1]);
+      var lbl = g.querySelector('text.label');
+      if (lbl) lbl.textContent = (oob ? '⚠ ' : '') + (it.title || it.type);
     }
     renderList();
     updateSelectionUI();
@@ -1385,11 +1481,21 @@
     $('btnRedo').disabled = !history.canRedo();
     var n = modifiedCount();
     $('changeLabel').textContent = state.model ? (n > 0 ? '已修改 ' + n + ' 个组件' : '') : '';
-    // 状态栏锁定计数
     if (state.model) {
-      var lockedN = 0;
-      for (var i = 0; i < state.model.items.length; i++) if (state.locked[state.model.items[i].id]) lockedN++;
+      var lockedN = 0, oobN = 0;
+      for (var i = 0; i < state.model.items.length; i++) {
+        var it = state.model.items[i];
+        if (state.locked[it.id]) lockedN++;
+        if (L.rectOutOfBounds(it, CW, CH)) oobN++;
+      }
       $('statusLock').textContent = '已锁定 ' + lockedN + ' / ' + state.model.items.length;
+      // Sprint 4：导入核对（X<Y 红色醒目）+ 越界计数（0 时不显示）
+      var si = $('statusImport');
+      si.textContent = '导入 ' + state.model.items.length + ' / CSV 共 ' + state.model.totalRows + ' 行';
+      si.classList.toggle('bad', state.model.items.length < state.model.totalRows);
+      var so = $('statusOob');
+      so.textContent = '越界 ' + oobN + ' 个';
+      so.style.display = oobN > 0 ? 'inline' : 'none'; // CSS 默认 display:none，必须显式 inline 才能覆盖样式表规则
     } else {
       $('statusLock').textContent = '已锁定 0 / 0';
     }
@@ -1792,7 +1898,6 @@
 
     $('fileLabel').textContent = fileName;
     $('fileLabel').title = fileName;
-    $('statusFile').textContent = '已导入：' + fileName + '（共 ' + model.items.length + ' 个组件，' + model.pages.length + ' 页）';
     ['btnSnapGrid', 'btnSnapComp', 'btnReset', 'btnExport', 'btnFit', 'btnBlueprint'].forEach(function (id) { $(id).disabled = false; });
     $('searchInput').disabled = false;
 
@@ -1808,24 +1913,48 @@
     file.text().then(function (text) {
       var model = L.parseCSV(text);
       if (model.items.length === 0 && model.errors.length) {
-        showMsg('error', '导入失败：未能解析任何组件行', model.errors.map(fmtError));
+        // 一行都没进来：仍弹模态框逐条列出原因，再保留底部提示
+        showImportProblems(model);
+        showMsg('error', '导入失败：未能解析任何组件行');
         return;
       }
       loadModel(model, file.name, text);
 
-      // 导入提示：小数取整只保留一条汇总；错误行仍逐条列出
-      if (model.errors.length) {
-        showMsg('warn', '导入完成：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页；' + model.errors.length + ' 行错误未导入', model.errors.map(fmtError));
+      // Sprint 4：损坏行/Id 重复警告 -> 模态对话框逐条列出（防静默丢行）；小数取整沿用底部提示
+      if (model.errors.length || model.warnings.length) {
+        showImportProblems(model);
       }
       if (model.roundNotes.length) {
         showMsg('warn', model.roundNotes.length + ' 行含小数，已四舍五入');
       }
-      if (!model.errors.length && !model.roundNotes.length) {
+      if (!model.errors.length && !model.warnings.length && !model.roundNotes.length) {
         showMsg('', '导入成功：' + model.items.length + ' 个组件 / ' + model.pages.length + ' 页');
       }
     }).catch(function (err) {
       showMsg('error', '读取文件失败：' + err.message);
     });
+  }
+
+  /** Sprint 4 导入核对模态框：逐条列出"第 N 行 / Id / 字段 / 原因"，须点击"知道了"关闭 */
+  function showImportProblems(model) {
+    var list = $('importErrList');
+    list.textContent = '';
+    model.errors.forEach(function (e) {
+      var div = document.createElement('div');
+      div.textContent = fmtError(e);
+      list.appendChild(div);
+    });
+    model.warnings.forEach(function (w) {
+      var div = document.createElement('div');
+      div.className = 'warn-line';
+      div.textContent = '第 ' + w.line + ' 行 / Id: ' + w.id + '：' + w.msg;
+      list.appendChild(div);
+    });
+    $('importErrTitle').textContent =
+      '导入核对：已导入 ' + model.items.length + ' / CSV 共 ' + model.totalRows + ' 行' +
+      (model.errors.length ? '（' + model.errors.length + ' 行损坏未导入）' : '') +
+      (model.warnings.length ? '（' + model.warnings.length + ' 条 Id 重复警告）' : '');
+    document.body.classList.add('modal-open');
   }
 
   function fmtError(e) {
@@ -1834,6 +1963,17 @@
 
   function exportFile() {
     if (!state.model) return;
+    // Sprint 4：导出前行数一致性 = 导入 Y - 损坏行；仍有越界组件时确认（可取消，不阻断）
+    var skipped = state.model.totalRows - state.model.items.length;
+    var oobN = 0;
+    for (var i = 0; i < state.model.items.length; i++) {
+      if (L.rectOutOfBounds(state.model.items[i], CW, CH)) oobN++;
+    }
+    if (oobN > 0) {
+      var msg = '仍有 ' + oobN + ' 个组件超出画布，是否继续导出？';
+      if (skipped > 0) msg += '\n\n原文件有 ' + skipped + ' 行未导入，导出文件不含这些行。';
+      if (!window.confirm(msg)) return;
+    }
     var csv = '﻿' + L.serializeCSV(state.model); // ﻿ = UTF-8 BOM（\uFEFF）
     var base = state.fileName.replace(/\.csv$/i, '');
     var outName = base + '-modified.csv';
@@ -1843,7 +1983,9 @@
     a.download = outName;
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    showMsg('', '已导出 ' + outName + '（' + state.model.items.length + ' 个组件，含未修改页；改动 ' + modifiedCount() + ' 个）');
+    var note = '已导出 ' + outName + '（' + state.model.items.length + ' 个组件，含未修改页；改动 ' + modifiedCount() + ' 个）';
+    if (skipped > 0) note += '；原文件有 ' + skipped + ' 行损坏未导入，导出文件不含这些行';
+    showMsg('', note);
   }
 
   // ==========================================================================
@@ -1933,7 +2075,8 @@
     }
     if (!vHit) fx = state.snapGrid ? Math.round(fx / GRID) * GRID : Math.round(fx);
     if (!hHit) fy = state.snapGrid ? Math.round(fy / GRID) * GRID : Math.round(fy);
-    var r = clampRect2({ x: fx, y: fy, w: d.item.w, h: d.item.h });
+    // Sprint 4：越界组件允许向画布内移动（越界程度不增即可），不被边界卡死
+    var r = L.clampDragRect(d.origRect, { x: fx, y: fy, w: d.item.w, h: d.item.h }, CW, CH);
     return { rect: r, vHit: vHit, hHit: hHit };
   }
 
@@ -1967,6 +2110,7 @@
           var wr = workspace.getBoundingClientRect();
           tip.textContent = (it.title ? it.title + '  ' : '') + it.type + '  #' + it.id.slice(0, 6) +
             '  x:' + it.x + ' y:' + it.y + ' w:' + it.w + ' h:' + it.h +
+            (L.rectOutOfBounds(it, CW, CH) ? '  ⚠越界' : '') +
             (state.locked[it.id] ? '  🔒已锁定' : '');
           tip.style.left = (e.clientX - wr.left + 14) + 'px';
           tip.style.top = (e.clientY - wr.top + 12) + 'px';
@@ -2092,7 +2236,7 @@
     if (!it || state.locked[it.id]) return; // 锁定组件不可编辑
     var v = L.validateRectInput({
       x: $('inX').value, y: $('inY').value, w: $('inW').value, h: $('inH').value
-    }, CW, CH, MIN_SIZE);
+    }, CW, CH, MIN_SIZE, L.copyRect(it)); // Sprint 4：越界组件输入"不更重越界"的值可接受
     if (!v.ok) {
       showToast('字段 ' + v.field + '：' + v.msg + '，已回退原值');
       // 先清 dirty 再同步，否则 syncInputs 会把焦点框视为"编辑中"而跳过回退
@@ -2211,6 +2355,10 @@
     renderPoints();
   });
 
+  $('btnImportErrOk').addEventListener('click', function () {
+    document.body.classList.remove('modal-open');
+  });
+
   $('btnUndo').addEventListener('click', function () { history.undo(); syncAfterDataChange(); });
   $('btnRedo').addEventListener('click', function () { history.redo(); syncAfterDataChange(); });
   $('btnReset').addEventListener('click', function () {
@@ -2237,7 +2385,7 @@
   function nudgeSelected(dx, dy) {
     var it = state.selectedId ? findItem(state.selectedId) : null;
     if (!it || state.locked[it.id]) return; // 锁定组件不可微调
-    var to = clampRect2({ x: it.x + dx, y: it.y + dy, w: it.w, h: it.h });
+    var to = L.clampDragRect(it, { x: it.x + dx, y: it.y + dy, w: it.w, h: it.h }, CW, CH);
     if (L.rectEq(to, it)) return;
     var now = Date.now();
     var top = history.peek();
